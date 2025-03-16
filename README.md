@@ -13,3 +13,11 @@
 - **Processes** – Identifies processes associated with network activity.  
 
 ...And audits them against threat intelligence sources.  
+
+## How to run
+
+Just
+
+        python3 src/SockEm.py
+
+Yep, it should run without a hitch.
