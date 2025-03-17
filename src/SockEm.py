@@ -19,11 +19,30 @@ import re
 import http.client
 import socket
 from datetime import datetime
-# fkk it we ball
+from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor
+import csv
+
+## You can customize your CTI sources here. Has to be a freetext or csv format for now though.
+
+CTI_SOURCES = [  
+            "https://threatview.io/Downloads/High-Confidence-CobaltStrike-C2%20-Feeds.txt",
+            "https://cdn.ellio.tech/community-feed"
+]
+
+IP_REGEX = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+
+
 def parse_ps_data():
     if sys.platform == "win32":
         # Powershell power
-        cmd = ["powershell","-Command","ps | Select-Object Handles, NPM, PM, WS, @{Name='CPU'; Expression={if ($_.CPU -ne $null) {$_.CPU} else {0.0}}},Id,SI,ProcessName | Format-Table -AutoSize"]
+        cmd = [
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-Command","ps | Select-Object Handles, NPM, PM, WS, @{Name='CPU'; Expression={if ($_.CPU -ne $null) {$_.CPU} else {0.0}}},Id,SI,ProcessName | Format-Table -AutoSize"
+        ]
+
         keys = ["Handles", "NPM(K)", "PM(K)", "%MEM", "CPU(s)",  "ID", "USER","PROCESSNAME"]
 
     else:  # Linux/macOS
@@ -51,30 +70,61 @@ def get_hostname():
     """Retrieve the system hostname."""
     return socket.gethostname()
 
-def query_threat_intel():
+def query_threat_intel(source):
     """Fetches high-confidence Cobalt Strike C2 IPs and returns them as a set."""
+    source_data = urlparse(source)
+    proto = source_data.scheme
+    fqdn = source_data.netloc
+    path = source_data.path
     try:
-        conn = http.client.HTTPSConnection("threatview.io", timeout=5)
-        conn.request("GET", "/Downloads/High-Confidence-CobaltStrike-C2%20-Feeds.txt")
+        if proto == "https":
+            client = http.client.HTTPSConnection
+        else:
+            client = http.client.HTTPConnection
+        conn = client(fqdn, timeout=5)
+        conn.request("GET", path)
         r1 = conn.getresponse()
-
         if r1.status != 200:
             print(f"[ERROR] Failed to fetch threat intel (HTTP {r1.status})", file=sys.stderr)
             return set()
-
-        raw_data = r1.read().decode().strip().split("\n")[3:]  # Skip headers
-        
-        threat_ips = set()
-        for line in raw_data:
-            values = line.split(",")
-            if len(values) >= 1:
-                threat_ips.add(values[0].strip())  # First column = IP
-
-        return threat_ips
-
+        return r1.read().decode().strip().split("\n")
     except Exception as e:
         print(f"[ERROR] Failed to fetch threat intel: {e}", file=sys.stderr)
         return set()
+def load_threat_data(file_path):
+    """Load threat intel from a local CSV file."""
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read().splitlines()
+    except Exception as e:
+        print(f"[ERROR] Failed to load {file_path}: {e}")
+        return []
+def parse_csv(lines):
+    """Parse CSV lines and extract IPs."""
+    threats = set()
+    reader = csv.reader(lines)
+    for row in reader:
+        if row:  # Assume IP is in the first column
+            for cell in row:  # Scan all columns for an IP
+                match = IP_REGEX.search(cell)
+                if match:
+                    ip = match.group()
+                    if ip not in threats:    
+                        threats.add(match.group())
+                        break  # Stop at the first valid IP in the row
+    return threats
+
+def aggregate(sources):
+    
+    threat_ips = set()
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        results = executor.map(lambda src: query_threat_intel(src) if src.startswith("http") else load_threat_data(src), sources)
+    
+    for result in results:
+        
+        threat_ips.update(parse_csv(result))
+    return threat_ips
 
 def parse_netstat():
     """Parses netstat output for active network connections."""
@@ -117,9 +167,11 @@ if __name__ == "__main__":
     hostname = get_hostname()
 
     print(f"\n[+] Forensic Network Scan - {timestamp} (Hostname: {hostname})")
+    
     print("[*] Fetching threat intelligence data...")
 
-    threat_ips = query_threat_intel()
+    threat_ips = aggregate(CTI_SOURCES)
+
     if not threat_ips:
         print("[!] No threat IPs found, skipping scan.", file=sys.stderr)
         sys.exit(1)

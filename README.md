@@ -27,3 +27,11 @@ Also if you don't want to clone the repo, that's alright too!
 
     curl https://raw.githubusercontent.com/Falanteris/SockEm/refs/heads/main/src/SockEm.py | python3
 
+
+## Concept
+
+SockEm is designed to have zero write activity on the device to preserve forensic integrity.
+
+I encourage you to fork this repo and modify the CTI sources as needed. This project is meant to be as open-source and flexible as possible.
+
+If you have any improvements, feel free to submit a PR/MR. Contributions are always welcome.
