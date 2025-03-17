@@ -144,7 +144,7 @@ if __name__ == "__main__":
             active_listening = dst[1]
 
         if conn.get("status", "").upper() == "LISTENING" or conn.get("state", "").upper() == "LISTENING" :
-            print(f"[~] WARNING: Active connections on {active_listening} for Process { process_running[conn["pid"]] } ") 
+            print(f"[~] WARNING: Active connections on {active_listening} for Process { process_running[conn['pid']] } ") 
         if src_ip in threat_ips:
             print(f"[!] ALERT: Source {src_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
             threat_count += 1

@@ -18,6 +18,12 @@
 
 Just
 
-        python3 src/SockEm.py
+    python3 src/SockEm.py
 
 Yep, it should run without a hitch.
+
+Also if you don't want to clone the repo, that's alright too!
+
+
+    curl https://raw.githubusercontent.com/Falanteris/SockEm/refs/heads/main/src/SockEm.py | python3
+
