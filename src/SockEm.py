@@ -220,7 +220,7 @@ if __name__ == "__main__":
         if len(dst) > 1 and dst[1] != "0":
             active_listening = dst[1]
 
-        if conn.get("status", "").upper() == "LISTENING" or conn.get("state", "").upper() == "ESTABLISHED":
+        if conn.get("state", "").upper() == "LISTENING" or conn.get("state", "").upper() == "ESTABLISHED":
             print(f"[...] INFO: Active connections on {active_listening} for Process { process_running[conn['pid']] } ") 
         if src_ip in threat_ips:
             print(f"[!] ALERT: Source {src_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
