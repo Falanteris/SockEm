@@ -219,17 +219,17 @@ if __name__ == "__main__":
             active_listening = src[1]
         if len(dst) > 1 and dst[1] != "0":
             active_listening = dst[1]
-        if active_listening:
-            if conn.get("state", "").upper() == "LISTENING" or conn.get("state", "").upper() == "ESTABLISHED":
-                final_pid = conn['pid']
-                if sys.platform == "linux":
-                    final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"     
-                print(f"[...] INFO: Active connections on {active_listening} for Process { process_running[final_pid] if final_pid != 'UNREADABLE' else final_pid } ") 
-            if src_ip in threat_ips:
-                print(f"[!] ALERT: Source {src_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
-                threat_count += 1
-            if dst_ip in threat_ips:
-                print(f"[!] ALERT: Destination {dst_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
-                threat_count += 1
+
+        if conn.get("state", "").upper() == "LISTENING" or conn.get("state", "").upper() == "ESTABLISHED":
+            final_pid = conn['pid']
+            if sys.platform == "linux":
+                final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"     
+            print(f"[...] INFO: Active connections on {active_listening} for Process { process_running[final_pid] if final_pid != 'UNREADABLE' else final_pid } ") 
+        if src_ip in threat_ips:
+            print(f"[!] ALERT: Source {src_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
+            threat_count += 1
+        if dst_ip in threat_ips:
+            print(f"[!] ALERT: Destination {dst_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
+            threat_count += 1
 
     print(f"\n[*] Scan complete: Found {threat_count} threats out of {len(connections)} active connections and {len(process_running.keys())} processes.\n")
