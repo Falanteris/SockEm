@@ -221,7 +221,11 @@ if __name__ == "__main__":
             active_listening = dst[1]
 
         if conn.get("state", "").upper() == "LISTENING" or conn.get("state", "").upper() == "ESTABLISHED":
-            print(f"[...] INFO: Active connections on {active_listening} for Process { process_running[conn['pid'].split('/')[0] if sys.platform == 'linux' else conn['pid']] } ") 
+            final_pid = "UNREADABLE"
+            if sys.platform == "linux":
+                final_pidconn['pid'].split('/')[0] if sys.platform == 'linux' else conn['pid']
+                pass
+            print(f"[...] INFO: Active connections on {active_listening} for Process { process_running[final_pid] if final_pid != "UNREADABLE" else final_pid } ") 
         if src_ip in threat_ips:
             print(f"[!] ALERT: Source {src_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
             threat_count += 1
