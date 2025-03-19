@@ -130,9 +130,13 @@ def parse_netstat():
     """Parses netstat output for active network connections."""
     if sys.platform == "win32":
         cmd = ["netstat", "-ano"]
-        keys = ["proto", "src", "dst", "status", "pid"]
+        keys = ["proto", "src", "dst", "state", "pid"]
+    elif sys.platform == "darwin":
+        cmd = ["lsof", "-i", "-nP"]
+        keys = ["process_name", "pid","user","file_descriptor","socket_type","kernel_device", "sizeof", "proto","conn_details"]
+
     else:  # Linux/macOS
-        cmd = ["netstat", "-tunp"]
+        cmd = ["netstat", "-tunpa"]
         keys = ["proto", "recv-q", "send-q", "src", "dst", "state", "pid"]
 
     try:
@@ -143,20 +147,41 @@ def parse_netstat():
 
     lines = output.split("\n")[2:]  # Skip headers
     results = []
+    if sys.platform == "darwin":
+        for line in lines:
+            columns = re.split(r"\s+", line.strip())  # Handle multiple spaces
+            if len(columns) < len(keys):
+                continue  # Skip malformed lines
 
-    for line in lines:
-        columns = re.split(r"\s+", line.strip())  # Handle multiple spaces
-        if len(columns) < len(keys):
-            continue  # Skip malformed lines
+            conn_info = dict(zip(keys, columns))
+            conn_data = conn_info["conn_details"].split(" ")
+            conn_info["state"] = conn_data[1]
+            ip_data = tuple([parts.split(":")[0] for parts in conn_data[0].split("->")])
+            src_ip, dst_ip = ip_data if len(ip_data) == 2 else tuple(list(ip_data)*2)
+            # if src_ip == dst_ip:
+            #     continue
 
-        conn_info = dict(zip(keys, columns))
+            conn_info["src"] = src_ip
 
-        # Ensure source and destination are not the same (same host issue)
-        src_ip, dst_ip = conn_info["src"].split(":")[0], conn_info["dst"].split(":")[0]
-        if src_ip == dst_ip:
-            continue
+            conn_info["dst"] = dst_ip
 
-        results.append(conn_info)
+            results.append(conn_info)
+
+
+    else:
+        for line in lines:
+            columns = re.split(r"\s+", line.strip())  # Handle multiple spaces
+            if len(columns) < len(keys):
+                continue  # Skip malformed lines
+
+            conn_info = dict(zip(keys, columns))
+
+            # Ensure source and destination are not the same (same host issue)
+            src_ip, dst_ip = conn_info["src"].split(":")[0], conn_info["dst"].split(":")[0]
+            # if src_ip == dst_ip:
+            #     continue
+
+            results.append(conn_info)
 
     return results
 
@@ -195,8 +220,8 @@ if __name__ == "__main__":
         if len(dst) > 1 and dst[1] != "0":
             active_listening = dst[1]
 
-        if conn.get("status", "").upper() == "LISTENING" or conn.get("state", "").upper() == "LISTENING" :
-            print(f"[~] WARNING: Active connections on {active_listening} for Process { process_running[conn['pid']] } ") 
+        if conn.get("status", "").upper() == "LISTENING" or conn.get("state", "").upper() == "ESTABLISHED":
+            print(f"[...] INFO: Active connections on {active_listening} for Process { process_running[conn['pid']] } ") 
         if src_ip in threat_ips:
             print(f"[!] ALERT: Source {src_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
             threat_count += 1
