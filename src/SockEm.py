@@ -27,11 +27,12 @@ import csv
 
 CTI_SOURCES = [  
             "https://threatview.io/Downloads/High-Confidence-CobaltStrike-C2%20-Feeds.txt",
-            "https://cdn.ellio.tech/community-feed"
+            "https://cdn.ellio.tech/community-feed",
+            "https://cinsscore.com/list/ci-badguys.txt" 
 ]
 
 IP_REGEX = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
-
+SCRIPT_SUFFIX = ("python", "php", "perl", "curl", "wget", "./")
 
 def parse_ps_data():
     if sys.platform == "win32":
@@ -214,7 +215,7 @@ if __name__ == "__main__":
         src_ip = src[0]
     
         dst_ip = dst[0]
-    
+
         if len(src) > 1 and src[1] != "0":
             active_listening = src[1]
         if len(dst) > 1 and dst[1] != "0":
@@ -223,13 +224,27 @@ if __name__ == "__main__":
         if conn.get("state", "").upper() == "LISTENING" or conn.get("state", "").upper() == "ESTABLISHED":
             final_pid = conn['pid']
             if sys.platform == "linux":
-                final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"     
-            print(f"[...] INFO: Active connections on {active_listening} for Process { process_running[final_pid] if final_pid != 'UNREADABLE' else final_pid } ") 
+                final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"
+            if sys.platform == "darwin":
+                proc_name = conn["process_name"]
+                if proc_name.startswith(SCRIPT_SUFFIX):
+                    print(f"[+++] WARNING: Active connections on {active_listening} from {src_ip} to {dst_ip} for Process { process_running[final_pid] if final_pid != 'UNREADABLE' else final_pid } ")         
+              # else:
+                #     print(f"[...] INFO: Active connections on {active_listening} for Process { process_running[final_pid] if final_pid != 'UNREADABLE' else final_pid } ") 
+            
+            else:
+                proc_name = process_running[final_pid]["PROCESSNAME"]
+                if proc_name.startswith(SCRIPT_SUFFIX):
+                    print(f"[+++] WARNING: Active connections on {active_listening} from {src_ip} to {dst_ip} for Process { process_running[final_pid] if final_pid != 'UNREADABLE' else final_pid } ")         
+                    
+                # else:
+                #     print(f"[...] INFO: Active connections on {active_listening} for Process { process_running[final_pid] if final_pid != 'UNREADABLE' else final_pid } ") 
+
         if src_ip in threat_ips:
             print(f"[!] ALERT: Source {src_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
             threat_count += 1
         if dst_ip in threat_ips:
             print(f"[!] ALERT: Destination {dst_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
             threat_count += 1
-
+        
     print(f"\n[*] Scan complete: Found {threat_count} threats out of {len(connections)} active connections and {len(process_running.keys())} processes.\n")
