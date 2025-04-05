@@ -27,6 +27,19 @@ Also if you don't want to clone the repo, that's alright too!
 
     curl https://raw.githubusercontent.com/Falanteris/SockEm/refs/heads/main/src/SockEm.py | python3
 
+And now you can daemonize this process.
+
+By setting DAEMONIZE env to 1
+
+        PS
+
+        $env:DAEMONIZE = 1
+
+And for Linux
+
+        Linux
+
+        export DAEMONIZE = 1
 
 ## Concept
 

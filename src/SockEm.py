@@ -21,9 +21,10 @@ import socket
 from datetime import datetime
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor
-import csv
+import csv, time, os, copy
 
 ## You can customize your CTI sources here. Has to be a freetext or csv format for now though.
+DAEMONIZE = True if os.getenv("DAEMONIZE") == "1" else False
 
 CTI_SOURCES = [  
             "https://threatview.io/Downloads/High-Confidence-CobaltStrike-C2%20-Feeds.txt",
@@ -185,31 +186,25 @@ def parse_netstat():
             results.append(conn_info)
 
     return results
-
-if __name__ == "__main__":
-    process_running = parse_ps_data()
-
-    timestamp = datetime.utcnow().isoformat()
-    hostname = get_hostname()
-
-    print(f"\n[+] Forensic Network Scan - {timestamp} (Hostname: {hostname})")
+def run_scan(threat_ips,timestamp,hostname,proc_cache):
     
-    print("[*] Fetching threat intelligence data...")
-
-    threat_ips = aggregate(CTI_SOURCES)
-
+    process_running = parse_ps_data()
+    
     if not threat_ips:
+        
         print("[!] No threat IPs found, skipping scan.", file=sys.stderr)
+        
         sys.exit(1)
-
-    print(f"[*] Loaded {len(threat_ips)} threat indicators.")
-
-    print("[*] Scanning active network connections...")
+ #   print("[*] Scanning active network connections...")
     connections = parse_netstat()
 
     threat_count = 0
+    
+    prev_cache = copy.copy(proc_cache)
+    proc_cache = []
     for conn in connections:
         src = conn["src"].split(":")
+        
         dst = conn["dst"].split(":")
     
         src_ip = src[0]
@@ -218,18 +213,23 @@ if __name__ == "__main__":
 
         if len(src) > 1 and src[1] != "0":
             active_listening = src[1]
+        
         if len(dst) > 1 and dst[1] != "0":
             active_listening = dst[1]
 
         if conn.get("state", "").upper() == "LISTENING" or conn.get("state", "").upper() == "ESTABLISHED":
             final_pid = conn['pid']
+            proc_cache.append(final_pid)
+            if final_pid in prev_cache or final_pid not in process_running.keys():
+                continue
             if sys.platform == "linux":
                 final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"
             if sys.platform == "darwin":
                 proc_name = conn["process_name"]
                 if proc_name.startswith(SCRIPT_SUFFIX):
-                    print(f"[+++] WARNING: Active connections on {active_listening} from {src_ip} to {dst_ip} for Process { process_running[final_pid] if final_pid != 'UNREADABLE' else final_pid } ")         
-              # else:
+                    print(f"[+++] WARNING: Active connections on {active_listening} from {src_ip} to {dst_ip} for Process { process_running[final_pid] if final_pid != 'UNREADABLE' else final_pid } ")
+                    
+            # else:
                 #     print(f"[...] INFO: Active connections on {active_listening} for Process { process_running[final_pid] if final_pid != 'UNREADABLE' else final_pid } ") 
             
             else:
@@ -247,4 +247,36 @@ if __name__ == "__main__":
             print(f"[!] ALERT: Destination {dst_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
             threat_count += 1
         
-    print(f"\n[*] Scan complete: Found {threat_count} threats out of {len(connections)} active connections and {len(process_running.keys())} processes.\n")
+#    print(f"\n[*] Scan complete: Found {threat_count} threats out of {len(connections)} active connections and {len(process_running.keys())} processes.\n")        
+    missing = list(set(prev_cache).difference(set(proc_cache)))
+
+    for items in missing:
+        print(f"[...] INFO: Process {items} has exited..")
+    return proc_cache
+if __name__ == "__main__":
+    print("[*] Fetching threat intelligence data...")
+    
+    threat_ips = aggregate(CTI_SOURCES)
+    
+    print(f"[*] Loaded {len(threat_ips)} threat indicators.")
+    
+    timestamp = datetime.utcnow().isoformat()
+    
+    hostname = get_hostname()
+
+    proc_cache = []
+    
+    print(f"\n[+] Forensic Network Scan - {timestamp} (Hostname: {hostname})")
+    
+    while True:
+        
+        proc_cache = run_scan(threat_ips,timestamp,hostname,proc_cache)
+
+        if not DAEMONIZE:
+            break
+
+        time.sleep(5)
+
+
+
+
