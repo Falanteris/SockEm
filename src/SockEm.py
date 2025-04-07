@@ -33,7 +33,7 @@ CTI_SOURCES = [
 ]
 
 IP_REGEX = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
-SCRIPT_SUFFIX = ("python", "php", "perl", "curl", "wget", "./")
+SCRIPT_SUFFIX = ("python", "php", "perl", "curl", "wget", "./","telnet","ssh","rsync")
 
 def parse_ps_data():
     if sys.platform == "win32":
@@ -217,13 +217,18 @@ def run_scan(threat_ips,timestamp,hostname,proc_cache):
         if len(dst) > 1 and dst[1] != "0":
             active_listening = dst[1]
 
-        if conn.get("state", "").upper() == "LISTENING" or conn.get("state", "").upper() == "ESTABLISHED":
+        if conn.get("state", "").upper().startswith("LISTEN") or conn.get("state", "").upper() == "ESTABLISHED":
+            
             final_pid = conn['pid']
-            proc_cache.append(final_pid)
-            if final_pid in prev_cache or final_pid not in process_running.keys():
-                continue
+            
             if sys.platform == "linux":
                 final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"
+            
+            proc_cache.append(final_pid)
+            
+            if final_pid in prev_cache or final_pid not in process_running.keys():
+                continue
+            
             if sys.platform == "darwin":
                 proc_name = conn["process_name"]
                 if proc_name.startswith(SCRIPT_SUFFIX):
