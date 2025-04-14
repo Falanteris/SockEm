@@ -8,14 +8,13 @@
             }
         ],
         "severity":"MEDIUM",
-        "description":"usually this is an SSH port, but that's not an ssh connection {}"
+        "description":"An unexpected connection is active,  {}"
     },
     {
         "rule_id":100002,
         "match_blacklist_process":[
             "nc",
-            "socat",
-            "telnet"
+            "socat"
         ],
         "severity":"CRITICAL",
         "description":"Potential Reverse-Bind Shell detected {}"
@@ -26,8 +25,8 @@
             5555,
             4444
         ],
-        "severity":"CRITICAL",
-        "description":"Potential Reverse-Bind Shell detected {}"
+        "severity":"MEDIUM",
+        "description":"A suspicious port is actively listening.. {}"
     },
     {
         "rule_id":100004,

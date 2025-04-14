@@ -45,6 +45,4 @@ And for Linux
 
 SockEm is designed to have zero write activity on the device to preserve forensic integrity.
 
-I encourage you to fork this repo and modify the CTI sources as needed. This project is meant to be as open-source and flexible as possible.
-
-If you have any improvements, feel free to submit a PR/MR. Contributions are always welcome.
+You can create your own custom ruleset under the ruleset folder that can help you detect a specific event.

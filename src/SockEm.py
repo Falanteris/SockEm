@@ -21,9 +21,9 @@ import socket
 from datetime import datetime
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor
-import csv, time, os, copy, glob, json
 
 ## You can customize your CTI sources here. Has to be a freetext or csv format for now though.
+import csv, time, os, copy, glob, json
 DAEMONIZE = True if os.getenv("DAEMONIZE") == "1" else False
 
 RULESET = glob.glob("ruleset/*.json")
@@ -40,10 +40,29 @@ def check_detected(pid):
     detected.append(pid)
 
     return False
+def match_process_pair(rule,process):    
+    rule_id = rule["rule_id"]
+
+    if "dst_port" not in process.keys():
+        return
+    
+    proc_parts = process["PROCESSNAME"].split("\\") if sys.platform == "windows" else process["PROCESSNAME"].split("/")
+    real_name = proc_parts[-1]
+    for whitelist in rule["match_process_pair"]:
+
+        valids = any([real_name.startswith(valid) for valid in whitelist["valid_process"]])
+        
+        port_valid = whitelist["port"] == int(process["dst_port"] if process["dst_port"] not in ('*','') else 0)
+
+        if not valids and port_valid:
+            if not check_detected(process["ID"]):
+                print("[{}]".format(rule["severity"]),end=' ')
+                print(rule["description"].format(process),end=' ')
+                print(rule["rule_id"])
+
 def match_blacklist_process(rule,process):    
     
     rule_id = rule["rule_id"]
-
     
     for blacklist in rule["match_blacklist_process"]:
         
@@ -76,6 +95,21 @@ def match_state(rule,process):
             print("[{}]".format(rule["severity"]),end=' ')
             print(rule["description"].format(process),end=' ')
             print(rule["rule_id"])
+            
+def match_blacklist_port(rule,process):
+    rule_id = rule["rule_id"]
+
+    if "src_port" not in process.keys():
+        
+        return
+
+    port_list = rule["match_blacklist_port"]
+    
+    if process["src_port"] in port_list:
+        if not check_detected(process["ID"]):
+            print("[{}]".format(rule["severity"]),end=' ')
+            print(rule["description"].format(process),end=' ')
+            print(rule["rule_id"])
 
 def load_ruleset():
     for rules in RULESET:
@@ -99,7 +133,14 @@ def check_process_with_ruleset(proc_data):
             #TODO: match_state
         if "match_blacklist_process" in rules.keys():
             match_blacklist_process(rules,proc_data)
-            pass
+            
+        if "match_blacklist_port" in rules.keys():
+            match_blacklist_port(rules,proc_data)
+
+        if "match_process_pair" in rules.keys():
+            
+            match_process_pair(rules,proc_data)
+            
     
 
     pass
@@ -301,17 +342,17 @@ def run_scan(timestamp,hostname,proc_cache):
             
             if sys.platform == "linux":
                 final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"
-            
-            proc_cache.append(final_pid)            
-            
-            process_running["dst_port"] = src[1]
-
-            process_running["src_port"] = src[1]
-
-            process_running["dst_ip"] = dst[0]
-
-            process_running["src_ip"] = src[0]
             if final_pid != "UNREADABLE":
+                
+                proc_cache.append(final_pid)            
+                
+                process_running[final_pid]["dst_port"] = dst[1]
+
+                process_running[final_pid]["src_port"] = src[1]
+
+                process_running[final_pid]["dst_ip"] = dst[0]
+
+                process_running[final_pid]["src_ip"] = src[0]
                 check_process_with_ruleset(process_running[final_pid])
             
             if final_pid in prev_cache or final_pid not in process_running.keys():
