@@ -21,10 +21,88 @@ import socket
 from datetime import datetime
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor
-import csv, time, os, copy
+import csv, time, os, copy, glob, json
 
 ## You can customize your CTI sources here. Has to be a freetext or csv format for now though.
 DAEMONIZE = True if os.getenv("DAEMONIZE") == "1" else False
+
+RULESET = glob.glob("ruleset/*.json")
+extracted_rid = []
+
+ruleset = []
+
+detected = []
+
+def check_detected(pid):
+    if pid in detected:
+        return True
+    
+    detected.append(pid)
+
+    return False
+def match_blacklist_process(rule,process):    
+    
+    rule_id = rule["rule_id"]
+
+    
+    for blacklist in rule["match_blacklist_process"]:
+        
+        proc_parts = process["PROCESSNAME"].split("\\") if sys.platform == "windows" else process["PROCESSNAME"].split("/")
+
+        real_name = proc_parts[-1]
+        if real_name.startswith(blacklist):
+            if not check_detected(process["ID"]):
+                print("[{}]".format(rule["severity"]),end=' ')
+                print(rule["description"].format(process),end=' ')
+                print(rule["rule_id"])
+    
+def match_state(rule,process):
+    rule_id = rule["rule_id"]
+    
+    memory_threshold  = rule["match_state"]["memory_kb"]
+    
+    try:
+        mem_threshold = int(memory_threshold.split(">")[-1])
+
+    except ValueError as ve:
+        print("VALUE ERROR, memory_kb is invalid..")
+    
+    kb_process = int(float(process["%MEM"]) / 1000)
+
+    verdict = False
+
+    if kb_process > mem_threshold:
+        if not check_detected(process["ID"]):
+            print("[{}]".format(rule["severity"]),end=' ')
+            print(rule["description"].format(process),end=' ')
+            print(rule["rule_id"])
+
+def load_ruleset():
+    for rules in RULESET:
+        with open(rules,"r") as reader:
+            rule_data = json.load(reader)
+
+            for rule in rule_data:
+                if rule["rule_id"] not in extracted_rid:
+                    extracted_rid.append(rule["rule_id"])
+                    ruleset.append(rule)
+    
+    pass
+        
+def check_process_with_ruleset(proc_data):
+    # load rulesets
+
+    for rules in ruleset:
+    
+        if "match_state" in rules.keys():
+            match_state(rules,proc_data)
+            #TODO: match_state
+        if "match_blacklist_process" in rules.keys():
+            match_blacklist_process(rules,proc_data)
+            pass
+    
+
+    pass
 
 CTI_SOURCES = [  
             "https://threatview.io/Downloads/High-Confidence-CobaltStrike-C2%20-Feeds.txt",
@@ -186,15 +264,15 @@ def parse_netstat():
             results.append(conn_info)
 
     return results
-def run_scan(threat_ips,timestamp,hostname,proc_cache):
+def run_scan(timestamp,hostname,proc_cache):
     
     process_running = parse_ps_data()
     
-    if not threat_ips:
+    # if not threat_ips:
         
-        print("[!] No threat IPs found, skipping scan.", file=sys.stderr)
+    #     print("[!] No threat IPs found, skipping scan.", file=sys.stderr)
         
-        sys.exit(1)
+    #     sys.exit(1)
  #   print("[*] Scanning active network connections...")
     connections = parse_netstat()
 
@@ -224,10 +302,21 @@ def run_scan(threat_ips,timestamp,hostname,proc_cache):
             if sys.platform == "linux":
                 final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"
             
-            proc_cache.append(final_pid)
+            proc_cache.append(final_pid)            
+            
+            process_running["dst_port"] = src[1]
+
+            process_running["src_port"] = src[1]
+
+            process_running["dst_ip"] = dst[0]
+
+            process_running["src_ip"] = src[0]
+            if final_pid != "UNREADABLE":
+                check_process_with_ruleset(process_running[final_pid])
             
             if final_pid in prev_cache or final_pid not in process_running.keys():
                 continue
+
             
             if sys.platform == "darwin":
                 proc_name = conn["process_name"]
@@ -245,12 +334,12 @@ def run_scan(threat_ips,timestamp,hostname,proc_cache):
                 # else:
                 #     print(f"[...] INFO: Active connections on {active_listening} for Process { process_running[final_pid] if final_pid != 'UNREADABLE' else final_pid } ") 
 
-        if src_ip in threat_ips:
-            print(f"[!] ALERT: Source {src_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
-            threat_count += 1
-        if dst_ip in threat_ips:
-            print(f"[!] ALERT: Destination {dst_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
-            threat_count += 1
+        # if src_ip in threat_ips:
+        #     print(f"[!] ALERT: Source {src_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
+        #     threat_count += 1
+        # if dst_ip in threat_ips:
+        #     print(f"[!] ALERT: Destination {dst_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
+        #     threat_count += 1
         
 #    print(f"\n[*] Scan complete: Found {threat_count} threats out of {len(connections)} active connections and {len(process_running.keys())} processes.\n")        
     missing = list(set(prev_cache).difference(set(proc_cache)))
@@ -259,11 +348,30 @@ def run_scan(threat_ips,timestamp,hostname,proc_cache):
         print(f"[...] INFO: Process {items} has exited..")
     return proc_cache
 if __name__ == "__main__":
-    print("[*] Fetching threat intelligence data...")
     
-    threat_ips = aggregate(CTI_SOURCES)
+    load_ruleset()
+
+    print("""
+       _____            _    ______ __  __ 
+  / ____|          | |  |  ____|  \/  |
+ | (___   ___   ___| | _| |__  | \  / |
+  \___ \ / _ \ / __| |/ /  __| | |\/| |
+  ____) | (_) | (__|   <| |____| |  | |
+ |_____/ \___/ \___|_|\_\______|_|  |_|
+                                       
+                                       
+    """)
+
+    print("Do you know who are you talking to.. ?")
+    print("")
+    print("")
+
+
+    # print("[*] Fetching threat intelligence data...")
     
-    print(f"[*] Loaded {len(threat_ips)} threat indicators.")
+    # threat_ips = aggregate(CTI_SOURCES)
+    
+    # print(f"[*] Loaded {len(threat_ips)} threat indicators.")
     
     timestamp = datetime.utcnow().isoformat()
     
@@ -275,7 +383,7 @@ if __name__ == "__main__":
     
     while True:
         
-        proc_cache = run_scan(threat_ips,timestamp,hostname,proc_cache)
+        proc_cache = run_scan(timestamp,hostname,proc_cache)
 
         if not DAEMONIZE:
             break
