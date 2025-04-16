@@ -31,7 +31,7 @@
     {
         "rule_id":100004,
         "match_state":{
-            "memory_kb":">1"
+            "memory_kb":">5000000"
 
         },
         "severity":"HIGH",
