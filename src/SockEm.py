@@ -18,12 +18,12 @@ import sys
 import re
 import http.client
 import socket
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor
 
 ## You can customize your CTI sources here. Has to be a freetext or csv format for now though.
-import csv, time, os, copy, glob, json
+import csv, time, os, copy, glob, json, socket
 DAEMONIZE = True if os.getenv("DAEMONIZE") == "1" else False
 
 RULESET = glob.glob("ruleset/*.json")
@@ -32,6 +32,19 @@ extracted_rid = []
 ruleset = []
 
 detected = []
+def get_outbound_ip():
+    ip_addr = "127.0.0.1"
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip_addr = s.getsockname()[0]
+        s.close()    
+    except socket.error:
+        pass
+
+    return ip_addr
+    
+
 
 def check_detected(pid):
     if pid in detected:
@@ -60,6 +73,8 @@ def match_process_pair(rule,process):
                 print(rule["description"].format(process),end=' ')
                 print(rule["rule_id"])
 
+            return rule["rule_id"],rule["description"].format(process),rule["severity"]
+
 def match_blacklist_process(rule,process):    
     
     rule_id = rule["rule_id"]
@@ -74,6 +89,8 @@ def match_blacklist_process(rule,process):
                 print("[{}]".format(rule["severity"]),end=' ')
                 print(rule["description"].format(process),end=' ')
                 print(rule["rule_id"])
+                
+            return rule["rule_id"],rule["description"].format(process),rule["severity"]
     
 def match_state(rule,process):
     rule_id = rule["rule_id"]
@@ -86,7 +103,7 @@ def match_state(rule,process):
     except ValueError as ve:
         print("VALUE ERROR, memory_kb is invalid..")
     
-    kb_process = int(float(process["%MEM"]) / 1000)
+    kb_process = process["Memory_Usage"]
 
     verdict = False
 
@@ -96,6 +113,8 @@ def match_state(rule,process):
             print(rule["description"].format(process),end=' ')
             print(rule["rule_id"])
             
+        return rule["rule_id"],rule["description"].format(process),rule["severity"]
+            
 def match_blacklist_port(rule,process):
     rule_id = rule["rule_id"]
 
@@ -104,13 +123,14 @@ def match_blacklist_port(rule,process):
         return
 
     port_list = rule["match_blacklist_port"]
-    
-    if process["src_port"] in port_list:
-        if not check_detected(process["ID"]):
-            print("[{}]".format(rule["severity"]),end=' ')
-            print(rule["description"].format(process),end=' ')
-            print(rule["rule_id"])
-
+    src_port = process["src_port"] or None
+    if src_port:
+        if int(src_port) in port_list:
+            if not check_detected(process["ID"]):
+                print("[{}]".format(rule["severity"]),end=' ')
+                print(rule["description"].format(process),end=' ')
+                print(rule["rule_id"])
+            return rule["rule_id"],rule["description"].format(process),rule["severity"]
 def load_ruleset():
     for rules in RULESET:
         with open(rules,"r") as reader:
@@ -121,38 +141,40 @@ def load_ruleset():
                     extracted_rid.append(rule["rule_id"])
                     ruleset.append(rule)
     
-    pass
         
 def check_process_with_ruleset(proc_data):
     # load rulesets
+    keys = ("rule_id","description","severity")
+    
+    matches = []
 
     for rules in ruleset:
-    
+        
         if "match_state" in rules.keys():
-            match_state(rules,proc_data)
-            #TODO: match_state
+            result_match = match_state(rules,proc_data)
+            if result_match:
+                matches.append(dict(zip(keys,result_match)))
+
+            
         if "match_blacklist_process" in rules.keys():
-            match_blacklist_process(rules,proc_data)
+            result_match = match_blacklist_process(rules,proc_data)
+            if result_match:
+                matches.append(dict(zip(keys,result_match)))
+            
+            
             
         if "match_blacklist_port" in rules.keys():
-            match_blacklist_port(rules,proc_data)
+            result_match = match_blacklist_port(rules,proc_data)
+            
+            if result_match:
+                matches.append(dict(zip(keys,result_match)))
+            
 
         if "match_process_pair" in rules.keys():
-            
-            match_process_pair(rules,proc_data)
-            
-    
-
-    pass
-
-CTI_SOURCES = [  
-            "https://threatview.io/Downloads/High-Confidence-CobaltStrike-C2%20-Feeds.txt",
-            "https://cdn.ellio.tech/community-feed",
-            "https://cinsscore.com/list/ci-badguys.txt" 
-]
-
-IP_REGEX = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
-SCRIPT_SUFFIX = ("python", "php", "perl", "curl", "wget", "./","telnet","ssh","rsync")
+            result_match = match_process_pair(rules,proc_data)  
+            if result_match:
+                matches.append(dict(zip(keys,result_match)))
+    return matches
 
 def parse_ps_data():
     if sys.platform == "win32":
@@ -162,14 +184,15 @@ def parse_ps_data():
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-Command","ps | Select-Object Handles, NPM, PM, WS, @{Name='CPU'; Expression={if ($_.CPU -ne $null) {$_.CPU} else {0.0}}},Id,SI,ProcessName | Format-Table -AutoSize"
+
         ]
 
-        keys = ["Handles", "NPM(K)", "PM(K)", "%MEM", "CPU(s)",  "ID", "USER","PROCESSNAME"]
+        keys = ["Handles", "NPM(K)", "PM(K)", "Memory_Usage", "CPU(s)","ID", "USER","PROCESSNAME"]
 
     else:  # Linux/macOS
         # good ol' linux
         cmd = ["ps","-aux"]
-        keys = ["USER","ID","%CPU","%MEM","VSZ","RSS","TTY","STAT","START","TIME", "PROCESSNAME"]
+        keys = ["USER","ID","%CPU","%MEM","VSZ","Memory_Usage","TTY","STAT","START","TIME", "PROCESSNAME"]
 
     try:
         data = subprocess.check_output(cmd).decode().strip().split("\n")[2:]
@@ -184,6 +207,8 @@ def parse_ps_data():
     for result in results:
         if sys.platform == "win32":
             result["USER"] = "SYSTEM" if result["USER"] == "0" else result["USER"]
+            result["Memory_Usage"] = int(float(result["Memory_Usage"] ) / 1024)
+
         process_kv[result["ID"]] = result
     return process_kv
     
@@ -220,21 +245,6 @@ def load_threat_data(file_path):
     except Exception as e:
         print(f"[ERROR] Failed to load {file_path}: {e}")
         return []
-def parse_csv(lines):
-    """Parse CSV lines and extract IPs."""
-    threats = set()
-    reader = csv.reader(lines)
-    for row in reader:
-        if row:  # Assume IP is in the first column
-            for cell in row:  # Scan all columns for an IP
-                match = IP_REGEX.search(cell)
-                if match:
-                    ip = match.group()
-                    if ip not in threats:    
-                        threats.add(match.group())
-                        break  # Stop at the first valid IP in the row
-    return threats
-
 def aggregate(sources):
     
     threat_ips = set()
@@ -269,6 +279,7 @@ def parse_netstat():
     lines = output.split("\n")[2:]  # Skip headers
     results = []
     if sys.platform == "darwin":
+
         for line in lines:
             columns = re.split(r"\s+", line.strip())  # Handle multiple spaces
             if len(columns) < len(keys):
@@ -298,17 +309,36 @@ def parse_netstat():
             conn_info = dict(zip(keys, columns))
 
             # Ensure source and destination are not the same (same host issue)
-            src_ip, dst_ip = conn_info["src"].split(":")[0], conn_info["dst"].split(":")[0]
+            # src_ip_raw = conn_info["src"].split(":")[0]
+            # dst_ip_raw = conn_info["dst"].split(":")[0]
+            
+            # src_ip, dst_ip = src_ip_raw if "[" != src_ip_raw else "127.0.0.1", dst_ip_raw if "[" != dst_ip_raw else "127.0.0.1"
+            
             # if src_ip == dst_ip:
             #     continue
+            conn_info["src"] = conn_info["src"].replace("[::]","0.0.0.0")
 
+            conn_info["src"] = conn_info["src"].replace("[::1]","127.0.0.1")
+            
+            conn_info["src"] = conn_info["src"].replace("::1","127.0.0.1")
+            
+            conn_info["dst"] = conn_info["dst"].replace("[::]","0.0.0.0")
+
+            conn_info["dst"] = conn_info["dst"].replace("[::1]","127.0.0.1")
+            
+            conn_info["dst"] = conn_info["dst"].replace("::1","127.0.0.1")
+            
             results.append(conn_info)
 
     return results
 def run_scan(timestamp,hostname,proc_cache):
     
-    process_running = parse_ps_data()
-    
+    process_info = {
+        "connections":[],
+        "highlighted":[],
+        "processes":[],
+        "matched":[]
+    }
     # if not threat_ips:
         
     #     print("[!] No threat IPs found, skipping scan.", file=sys.stderr)
@@ -316,11 +346,15 @@ def run_scan(timestamp,hostname,proc_cache):
     #     sys.exit(1)
  #   print("[*] Scanning active network connections...")
     connections = parse_netstat()
-
-    threat_count = 0
     
+    process_running = parse_ps_data()
+
+    process_info["processes"] = process_running
+
     prev_cache = copy.copy(proc_cache)
+    
     proc_cache = []
+    
     for conn in connections:
         src = conn["src"].split(":")
         
@@ -341,7 +375,9 @@ def run_scan(timestamp,hostname,proc_cache):
             final_pid = conn['pid']
             
             if sys.platform == "linux":
+                
                 final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"
+
             if final_pid != "UNREADABLE":
                 
                 proc_cache.append(final_pid)            
@@ -353,41 +389,22 @@ def run_scan(timestamp,hostname,proc_cache):
                 process_running[final_pid]["dst_ip"] = dst[0]
 
                 process_running[final_pid]["src_ip"] = src[0]
-                check_process_with_ruleset(process_running[final_pid])
-            
-            if final_pid in prev_cache or final_pid not in process_running.keys():
-                continue
+                
+                matches = check_process_with_ruleset(process_running[final_pid])
+
+                process_info["matched"] += matches
+
+            process_info["connections"].append(process_running[final_pid])
+                
+            # if final_pid in prev_cache or final_pid not in process_running.keys():
+            #     continue
 
             
-            if sys.platform == "darwin":
-                proc_name = conn["process_name"]
-                if proc_name.startswith(SCRIPT_SUFFIX):
-                    print(f"[+++] WARNING: Active connections on {active_listening} from {src_ip} to {dst_ip} for Process { process_running[final_pid] if final_pid != 'UNREADABLE' else final_pid } ")
-                    
-            # else:
-                #     print(f"[...] INFO: Active connections on {active_listening} for Process { process_running[final_pid] if final_pid != 'UNREADABLE' else final_pid } ") 
-            
-            else:
-                proc_name = process_running[final_pid]["PROCESSNAME"]
-                if proc_name.startswith(SCRIPT_SUFFIX):
-                    print(f"[+++] WARNING: Active connections on {active_listening} from {src_ip} to {dst_ip} for Process { process_running[final_pid] if final_pid != 'UNREADABLE' else final_pid } ")         
-                    
-                # else:
-                #     print(f"[...] INFO: Active connections on {active_listening} for Process { process_running[final_pid] if final_pid != 'UNREADABLE' else final_pid } ") 
-
-        # if src_ip in threat_ips:
-        #     print(f"[!] ALERT: Source {src_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
-        #     threat_count += 1
-        # if dst_ip in threat_ips:
-        #     print(f"[!] ALERT: Destination {dst_ip} is a known threat. [Proto: {conn['proto']}, Status: {conn.get('status', 'N/A')}]")
-        #     threat_count += 1
-        
-#    print(f"\n[*] Scan complete: Found {threat_count} threats out of {len(connections)} active connections and {len(process_running.keys())} processes.\n")        
     missing = list(set(prev_cache).difference(set(proc_cache)))
 
     for items in missing:
         print(f"[...] INFO: Process {items} has exited..")
-    return proc_cache
+    return proc_cache,process_info
 if __name__ == "__main__":
     
     load_ruleset()
@@ -407,30 +424,38 @@ if __name__ == "__main__":
     print("")
     print("")
 
-
-    # print("[*] Fetching threat intelligence data...")
-    
-    # threat_ips = aggregate(CTI_SOURCES)
-    
-    # print(f"[*] Loaded {len(threat_ips)} threat indicators.")
-    
-    timestamp = datetime.utcnow().isoformat()
+    timestamp = datetime.now(timezone.utc).isoformat()
     
     hostname = get_hostname()
 
     proc_cache = []
+
+    heartbeat_data = {}
+    
+    heartbeat_data["hostname"] = hostname
     
     print(f"\n[+] Forensic Network Scan - {timestamp} (Hostname: {hostname})")
     
     while True:
+        timestamp = datetime.now(timezone.utc).isoformat()
         
-        proc_cache = run_scan(timestamp,hostname,proc_cache)
+        heartbeat_data["outbound_ip"] = get_outbound_ip()
+        
+        heartbeat_data["timestamp"] = timestamp
+
+        proc_cache,process_heartbeat = run_scan(timestamp,hostname,proc_cache)
+
+        heartbeat_data["beat"] = process_heartbeat
+        
+
+        with open("ps_heartbeat.json","w") as ps_heartbeat:
+            json.dump(heartbeat_data,ps_heartbeat)
 
         if not DAEMONIZE:
+            
             break
-
-        time.sleep(5)
-
+        
+        time.sleep(3)
 
 
 
