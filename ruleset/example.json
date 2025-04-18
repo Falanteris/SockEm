@@ -31,7 +31,7 @@
         "description":"Programmed script running in the background {}"
     },
     {
-        "rule_id":100007,
+        "rule_id":100009,
         "match_blacklist_process":[
             "ssh",
             "telnet",
