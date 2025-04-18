@@ -208,6 +208,8 @@ def parse_ps_data():
         if sys.platform == "win32":
             result["USER"] = "SYSTEM" if result["USER"] == "0" else result["USER"]
             result["Memory_Usage"] = int(float(result["Memory_Usage"] ) / 1024)
+        else:
+            result["Memory_Usage"] = int(float(result["Memory_Usage"] ))
 
         process_kv[result["ID"]] = result
     return process_kv
