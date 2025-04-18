@@ -4,6 +4,8 @@ SockEm lets you load external rulesets in JSON format to tailor detection for yo
 
 These rules allow you to flag unexpected process/port pairs, memory usage anomalies, and known suspicious tools like `nc`, `telnet`, or `socat`.
 
+**NB: Memory data is stored in kilobytes**
+
 ---
 
 ## 🔧 Ruleset Format
@@ -38,3 +40,47 @@ Rules must be in valid JSON and structured as an array of rule objects. Each rul
   "severity": "medium",
   "description": "Usually this is an SSH port, but that's not an ssh connection: {}"
 }
+```
+
+### 🎯 Rule 2: Known-Executables
+```json
+{
+        "rule_id":100002,
+        "match_blacklist_process":[
+            "nc",
+            "socat"
+        ],
+        "severity":"CRITICAL",
+        "description":"Potential Reverse-Bind Shell detected {}"
+}
+```
+
+### 🎯 Rule 3: Known Suspicious Port
+```json
+{
+        "rule_id":100003,
+        "match_blacklist_port":[
+            5555,
+            4444
+        ],
+        "severity":"MEDIUM",
+        "description":"A suspicious port is actively listening.. {}"
+}
+```
+
+
+### 🎯 Rule 4: Anomalous process state
+```json
+{
+        "rule_id":100004,
+        "match_state":{
+            "memory_kb":">5000000"
+
+        },
+        "severity":"HIGH",
+        "description":"High memory consumption from process {}"
+}
+```
+
+
+**IMPORTANT NOTE**: Make sure for each rule to have **unique rule_id**, only the first rule with a distinct rule_id will be executed.
