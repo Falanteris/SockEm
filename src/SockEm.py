@@ -73,7 +73,7 @@ def match_process_pair(rule,process):
                 print(rule["description"].format(process),end=' ')
                 print(rule["rule_id"])
 
-            return rule["rule_id"],rule["description"].format(process),rule["severity"]
+            return rule["rule_id"],rule["description"].format(process),rule["severity"],process
 
 def match_blacklist_process(rule,process):    
     
@@ -90,7 +90,7 @@ def match_blacklist_process(rule,process):
                 print(rule["description"].format(process),end=' ')
                 print(rule["rule_id"])
                 
-            return rule["rule_id"],rule["description"].format(process),rule["severity"]
+            return rule["rule_id"],rule["description"].format(process),rule["severity"],process
     
 def match_state(rule,process):
     rule_id = rule["rule_id"]
@@ -113,7 +113,7 @@ def match_state(rule,process):
             print(rule["description"].format(process),end=' ')
             print(rule["rule_id"])
             
-        return rule["rule_id"],rule["description"].format(process),rule["severity"]
+        return rule["rule_id"],rule["description"].format(process),rule["severity"],process
             
 def match_blacklist_port(rule,process):
     rule_id = rule["rule_id"]
@@ -130,7 +130,7 @@ def match_blacklist_port(rule,process):
                 print("[{}]".format(rule["severity"]),end=' ')
                 print(rule["description"].format(process),end=' ')
                 print(rule["rule_id"])
-            return rule["rule_id"],rule["description"].format(process),rule["severity"]
+            return rule["rule_id"],rule["description"].format(process),rule["severity"],process
 def load_ruleset():
     for rules in RULESET:
         with open(rules,"r") as reader:
@@ -144,7 +144,7 @@ def load_ruleset():
         
 def check_process_with_ruleset(proc_data):
     # load rulesets
-    keys = ("rule_id","description","severity")
+    keys = ("rule_id","description","severity","process_data")
     
     matches = []
 
