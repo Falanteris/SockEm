@@ -31,6 +31,16 @@
         "description":"Programmed script running in the background {}"
     },
     {
+        "rule_id":100007,
+        "match_blacklist_process":[
+            "ssh",
+            "telnet",
+            "rsync"
+        ],
+        "severity":"MEDIUM",
+        "description":"Server is remoting another server {}"
+    },
+    {
         "rule_id":100003,
         "match_blacklist_port":[
             5555,
