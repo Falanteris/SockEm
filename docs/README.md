@@ -30,7 +30,11 @@ We currently support:
 - `blacklist_port` – Flag connections on suspicious ports
 - `match_state` – Match memory or other runtime stats (e.g., memory_kb > 100000)
 
-→ See [custom-rulesets.md](./custom-rulesets.md) for detailed rule examples and schema.
+→ See [custom-rulesets.md](./custom-ruleset.md) for detailed rule examples and schema.
+
+
+→ See [config.md](./config.md) for configuration reference.
+
 
 ---
 

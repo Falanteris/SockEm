@@ -23,8 +23,17 @@ from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor
 
 ## You can customize your CTI sources here. Has to be a freetext or csv format for now though.
-import csv, time, os, copy, glob, json, socket
+import csv, time, os, copy, glob, json, socket, base64, ssl
 DAEMONIZE = True if os.getenv("DAEMONIZE") == "1" else False
+# OpenSearch credentials
+username = os.getenv("INDEXER_USERNAME","admin")
+
+password = os.getenv("INDEXER_PASSWORD","password")
+
+indexer_host = os.getenv("INDEXER_HOST", "localhost")
+
+indexer_port = os.getenv("INDEXER_PORT", 9200)
+
 
 RULESET = glob.glob("ruleset/*.json")
 extracted_rid = []
@@ -32,6 +41,33 @@ extracted_rid = []
 ruleset = []
 
 detected = []
+
+
+def send_to_indexer(beat):
+    """Send data to the indexer."""
+    conn = http.client.HTTPSConnection(
+        indexer_host,indexer_port,context=ssl._create_unverified_context()
+    )
+
+    auth_token = base64.b64encode(f"{username}:{password}".encode()).decode()
+
+    conn.request(
+    "POST",
+    "/sock-em-alerts/_doc",
+    body=json.dumps(beat),
+        headers={
+        "Content-Type": "application/json",
+        "Authorization": f"Basic {auth_token}"
+        }
+    )
+
+    # Handle response
+    response = conn.getresponse()
+    
+    conn.close()
+
+    return response.status == 201
+
 def get_outbound_ip():
     ip_addr = "127.0.0.1"
     try:
@@ -44,8 +80,6 @@ def get_outbound_ip():
 
     return ip_addr
     
-
-
 def check_detected(pid):
     if pid in detected:
         return True
@@ -73,7 +107,7 @@ def match_process_pair(rule,process):
                 print(rule["description"].format(process),end=' ')
                 print(rule["rule_id"])
 
-            return rule["rule_id"],rule["description"].format(process),rule["severity"],process
+                return rule["rule_id"],rule["description"].format(process),rule["severity"],process
 
 def match_blacklist_process(rule,process):    
     
@@ -90,7 +124,7 @@ def match_blacklist_process(rule,process):
                 print(rule["description"].format(process),end=' ')
                 print(rule["rule_id"])
                 
-            return rule["rule_id"],rule["description"].format(process),rule["severity"],process
+                return rule["rule_id"],rule["description"].format(process),rule["severity"],process
     
 def match_state(rule,process):
     rule_id = rule["rule_id"]
@@ -113,7 +147,7 @@ def match_state(rule,process):
             print(rule["description"].format(process),end=' ')
             print(rule["rule_id"])
             
-        return rule["rule_id"],rule["description"].format(process),rule["severity"],process
+            return rule["rule_id"],rule["description"].format(process),rule["severity"],process
             
 def match_blacklist_port(rule,process):
     rule_id = rule["rule_id"]
@@ -130,7 +164,7 @@ def match_blacklist_port(rule,process):
                 print("[{}]".format(rule["severity"]),end=' ')
                 print(rule["description"].format(process),end=' ')
                 print(rule["rule_id"])
-            return rule["rule_id"],rule["description"].format(process),rule["severity"],process
+                return rule["rule_id"],rule["description"].format(process),rule["severity"],process
 def load_ruleset():
     for rules in RULESET:
         with open(rules,"r") as reader:
@@ -247,17 +281,6 @@ def load_threat_data(file_path):
     except Exception as e:
         print(f"[ERROR] Failed to load {file_path}: {e}")
         return []
-def aggregate(sources):
-    
-    threat_ips = set()
-
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        results = executor.map(lambda src: query_threat_intel(src) if src.startswith("http") else load_threat_data(src), sources)
-    
-    for result in results:
-        
-        threat_ips.update(parse_csv(result))
-    return threat_ips
 
 def parse_netstat():
     """Parses netstat output for active network connections."""
@@ -337,7 +360,6 @@ def run_scan(timestamp,hostname,proc_cache):
     
     process_info = {
         "connections":[],
-        "highlighted":[],
         "processes":[],
         "matched":[]
     }
@@ -351,10 +373,11 @@ def run_scan(timestamp,hostname,proc_cache):
     
     process_running = parse_ps_data()
 
-    process_info["processes"] = process_running
-
     prev_cache = copy.copy(proc_cache)
-    
+
+
+    # process_info["processes"] = [f"{process_running[procs]["ID"],process_running[procs]["PROCESSNAME"],process_running[procs]["Memory_Usage"]}" for procs in process_running if process_running[procs]["ID"] not in prev_cache]
+
     proc_cache = []
     
     for conn in connections:
@@ -371,18 +394,25 @@ def run_scan(timestamp,hostname,proc_cache):
         
         if len(dst) > 1 and dst[1] != "0":
             active_listening = dst[1]
-
+        
         if conn.get("state", "").upper().startswith("LISTEN") or conn.get("state", "").upper() == "ESTABLISHED":
             
             final_pid = conn['pid']
+            if final_pid in proc_cache:
+                # prevent duplicates, should be more advanced based on the smallest PID?
+                continue
+            proc_cache.append(final_pid)
+            
+            if final_pid in prev_cache:
+                # prevent duplicates for entries.
+                continue
             
             if sys.platform == "linux":
                 
                 final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"
 
             if final_pid != "UNREADABLE":
-                
-                proc_cache.append(final_pid)            
+                            
                 
                 process_running[final_pid]["dst_port"] = dst[1]
 
@@ -393,20 +423,27 @@ def run_scan(timestamp,hostname,proc_cache):
                 process_running[final_pid]["src_ip"] = src[0]
                 
                 matches = check_process_with_ruleset(process_running[final_pid])
-
-                process_info["matched"] += matches
-
-            process_info["connections"].append(process_running[final_pid])
+                if len(matches) > 0:
+                    process_info["matched"] += matches
                 
-            # if final_pid in prev_cache or final_pid not in process_running.keys():
-            #     continue
-
-            
+                process_info["connections"].append(process_running[final_pid])
+                
+          
     missing = list(set(prev_cache).difference(set(proc_cache)))
 
     for items in missing:
         print(f"[...] INFO: Process {items} has exited..")
+
     return proc_cache,process_info
+def stamp_process(process):
+    """Stamp process with information."""
+    return {**process, 
+    "timestamp": datetime.now(timezone.utc).isoformat(), 
+    "hostname": get_hostname(), 
+    "outbound_ip": get_outbound_ip(),
+    "platform": sys.platform
+    }
+    
 if __name__ == "__main__":
     
     load_ruleset()
@@ -431,27 +468,31 @@ if __name__ == "__main__":
     hostname = get_hostname()
 
     proc_cache = []
-
-    heartbeat_data = {}
-    
-    heartbeat_data["hostname"] = hostname
     
     print(f"\n[+] Forensic Network Scan - {timestamp} (Hostname: {hostname})")
     
     while True:
-        timestamp = datetime.now(timezone.utc).isoformat()
-        
-        heartbeat_data["outbound_ip"] = get_outbound_ip()
-        
-        heartbeat_data["timestamp"] = timestamp
-
         proc_cache,process_heartbeat = run_scan(timestamp,hostname,proc_cache)
+        #with open("ps_heartbeat.json","w") as ps_heartbeat:
+        #    json.dump(heartbeat_data,ps_heartbeat)
+        with ThreadPoolExecutor(max_workers=50) as executor:
+            results = []
+            count = 0
+            for event in process_heartbeat["matched"]:
+                stamped = stamp_process(event)
+                stamped["type"] = "SockEm Alert"
+                results.append(executor.submit(send_to_indexer, stamped))
+                count+=1
+            for event in process_heartbeat["connections"]:
+                stamped = stamp_process(event)
+                stamped["type"] = "SockEm Connection Dump"
+                results.append(executor.submit(send_to_indexer, stamped))
+                count+=1
+            
+            print(count)
 
-        heartbeat_data["beat"] = process_heartbeat
-        
-
-        with open("ps_heartbeat.json","w") as ps_heartbeat:
-            json.dump(heartbeat_data,ps_heartbeat)
+            for result in results:
+                result.result()
 
         if not DAEMONIZE:
             
