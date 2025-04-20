@@ -21,14 +21,19 @@ import socket
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor
+import time
+import os
+import copy
+import glob
+import json
+import base64
+import ssl
 
-## You can customize your CTI sources here. Has to be a freetext or csv format for now though.
-import csv, time, os, copy, glob, json, socket, base64, ssl
 DAEMONIZE = True if os.getenv("DAEMONIZE") == "1" else False
 # OpenSearch credentials
-username = os.getenv("INDEXER_USERNAME","admin")
+username = os.getenv("INDEXER_USERNAME", "admin")
 
-password = os.getenv("INDEXER_PASSWORD","password")
+password = os.getenv("INDEXER_PASSWORD", "password")
 
 indexer_host = os.getenv("INDEXER_HOST", "localhost")
 
@@ -46,29 +51,28 @@ detected = []
 def send_to_indexer(beat):
     """Send data to the indexer."""
     conn = http.client.HTTPSConnection(
-        indexer_host,indexer_port,context=ssl._create_unverified_context()
+        indexer_host, indexer_port, context=ssl._create_unverified_context()
     )
-
     auth_token = base64.b64encode(f"{username}:{password}".encode()).decode()
+    headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Basic {auth_token}"
+    }
+    try:
+        conn.request(
+            "POST", "/sock-em-alerts/_doc",
+            body=json.dumps(beat), headers=headers
+        )
+        # Handle response
+        response = conn.getresponse()
+        conn.close()
 
-    conn.request(
-    "POST",
-    "/sock-em-alerts/_doc",
-    body=json.dumps(beat),
-        headers={
-        "Content-Type": "application/json",
-        "Authorization": f"Basic {auth_token}"
-        }
-    )
-
-    # Handle response
-    response = conn.getresponse()
-    
-    conn.close()
-
-    return response.status == 201
+        return response.status == 201
+    except (TimeoutError, ConnectionRefusedError):
+        return False
 
 def get_outbound_ip():
+    
     ip_addr = "127.0.0.1"
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -398,7 +402,7 @@ def run_scan(timestamp,hostname,proc_cache):
         if conn.get("state", "").upper().startswith("LISTEN") or conn.get("state", "").upper() == "ESTABLISHED":
             
             final_pid = conn['pid']
-            if final_pid in proc_cache:
+            if final_pid in proc_cache or final_pid not in process_running.keys():
                 # prevent duplicates, should be more advanced based on the smallest PID?
                 continue
             proc_cache.append(final_pid)
@@ -473,6 +477,7 @@ if __name__ == "__main__":
     
     while True:
         proc_cache,process_heartbeat = run_scan(timestamp,hostname,proc_cache)
+        
         #with open("ps_heartbeat.json","w") as ps_heartbeat:
         #    json.dump(heartbeat_data,ps_heartbeat)
         with ThreadPoolExecutor(max_workers=50) as executor:
@@ -487,9 +492,6 @@ if __name__ == "__main__":
                 stamped = stamp_process(event)
                 stamped["type"] = "SockEm Connection Dump"
                 results.append(executor.submit(send_to_indexer, stamped))
-                count+=1
-            
-            print(count)
 
             for result in results:
                 result.result()
