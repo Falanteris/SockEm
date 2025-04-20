@@ -47,7 +47,7 @@ jobs:
       
       - name: Archive Binary
         if: matrix.os == 'windows-latest'
-        run: mv dist/SockEm dist/SockEm.exe
+        run: mv dist/SockEm.exe dist/SockEm-windows.exe
 
   release:
     name: Create Release
