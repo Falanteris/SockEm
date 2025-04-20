@@ -38,8 +38,14 @@
                   />
 
     <InstallExecuteSequence>
-      <Custom Action="InstallService" After="InstallFinalize"/>
+      <!-- Ensure the InstallService action happens after InstallInitialize -->
+      <Custom Action="InstallService" After="InstallInitialize"/>
+      
+      <!-- Ensure the StartService action happens after InstallService -->
       <Custom Action="StartService" After="InstallService"/>
+      
+      <!-- Ensure InstallFinalize is the last action -->
+      <Custom Action="InstallFinalize" After="StartService"/>
     </InstallExecuteSequence>
 
   </Product>
