@@ -77,7 +77,7 @@ jobs:
         shell: pwsh
         run: |
           candle sockem.wxs
-          light sockem.wixobj -o SockEmInstaller.msi
+          light sockem.wixobj -o SockEmInstaller-x64.msi
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4

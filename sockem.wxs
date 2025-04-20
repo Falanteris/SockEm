@@ -25,7 +25,7 @@
 
     <CustomAction Id="InstallService"
                   Directory="INSTALLFOLDER"
-                  ExeCommand="nssm install SockEmService &quot;[INSTALLFOLDER]SockEm.exe&quot;"
+                  ExeCommand="nssm_64 install SockEmService &quot;[INSTALLFOLDER]SockEm-windows.exe&quot;"
                   Execute="deferred"
                   Impersonate="no"
                   Return="check" />
