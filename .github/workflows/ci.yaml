@@ -43,48 +43,6 @@ jobs:
       - name: Archive Binary
         if: matrix.os == 'windows-latest'
         run: mv dist/SockEm.exe dist/SockEm-windows.exe
-        
-      - name: Set Version from Git 
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          # Get the tag, strip the 'v' if it exists (e.g., 'v1.2.3')
-          $tag = (git describe --tags).TrimStart("v")
-          
-          # Optional: convert to MSI-friendly format (4-part version)
-          if ($tag -notmatch '\d+\.\d+\.\d+\.\d+') {
-            $tag = "$tag.0"
-          }
-
-          Write-Host "Parsed version: $tag"
-
-          # Replace version in the WiX file
-          (Get-Content sockem.wxs) -replace 'Version="\d+\.\d+\.\d+\.\d+"', "Version=`"$tag`"" |
-            Set-Content sockem.wxs
-
-      - name: Download or use bundled NSSM
-        if: matrix.os == 'windows-latest'
-        run: |
-          curl -o nssm-2.24.zip https://nssm.cc/release/nssm-2.24.zip
-          tar -xf nssm-2.24.zip
-          copy .\nssm-2.24\win64\nssm_64.exe .\
-
-      - name: Install WiX Toolset
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          choco install wixtoolset --yes
-            
-          Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-          
-          refreshenv
-
-      - name: Build MSI with WiX
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          candle sockem.wxs
-          light sockem.wixobj -o SockEmInstaller-x64.msi
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
