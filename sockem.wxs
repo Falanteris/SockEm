@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+
+  <Product Id="*" Name="SockEm" Language="1033" Version="1.0.0.0" Manufacturer="YourName" UpgradeCode="PUT-GUID-HERE">
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
+    <MediaTemplate />
+    
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLFOLDER" Name="SockEm">
+          <Component Id="MainExecutable" Guid="PUT-GUID-HERE">
+            <File Id="SockEmExe" Source="SockEm.exe" />
+            <File Id="NSSMExe" Source="nssm.exe" />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="ProductFeature" Title="SockEm" Level="1">
+      <ComponentRef Id="MainExecutable"/>
+    </Feature>
+
+    <!-- Run NSSM to register SockEm as a service -->
+    <CustomAction Id="InstallService"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="nssm install SockEmService &quot;[INSTALLFOLDER]SockEm.exe&quot;"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="no"
+                  />
+
+    <CustomAction Id="StartService"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="net start SockEmService"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="no"
+                  />
+
+    <InstallExecuteSequence>
+      <Custom Action="InstallService" After="InstallFinalize"/>
+      <Custom Action="StartService" After="InstallService"/>
+    </InstallExecuteSequence>
+
+  </Product>
+</Wix>

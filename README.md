@@ -2,7 +2,7 @@
 
 ![Build Status](https://github.com/Falanteris/SockEm/actions/workflows/ci.yaml/badge.svg)
 
-![Coverage](https://codecov.io/gh//Falanteris/SockEm/branch/main/graph/badge.svg)
+
 
 SockEm is a tool for ...
 ## Features  
