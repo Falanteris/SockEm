@@ -61,4 +61,3 @@ This can also be helpful if you don't have an **OpenSearch** or **ElasticSearch*
  & nssm_64.exe set SockEmService AppStdout "$PWD\sockem-stdout.logs"
 ```
 
-
