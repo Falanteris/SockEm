@@ -38,7 +38,7 @@ jobs:
 
       - name: Build Binary
         run: |
-          pyinstaller --onefile SockEm.py
+          pyinstaller --onefile src/SockEm.py
         shell: bash
 
       - name: Archive Binary
