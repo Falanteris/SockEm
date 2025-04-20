@@ -6,13 +6,9 @@ on:
       - 'v*'
 
 jobs:
-  build:
-    name: Build Binaries
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -22,9 +18,16 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install PyInstaller
-        run: pip install pyinstaller coverage
-
+      - name: Install Dependencies
+        run: pip install -r coverage
+      
+  build:
+    name: Build Binaries
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
       - name: Run Tests with Coverage
         run: |
           coverage run src/SockEm.py
@@ -36,6 +39,18 @@ jobs:
           files: coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
 
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
       - name: Build Binary
         run: |
           pyinstaller --onefile src/SockEm.py
@@ -44,7 +59,7 @@ jobs:
       - name: Archive Binary
         if: matrix.os == 'ubuntu-latest'
         run: mv dist/SockEm dist/SockEm-linux
-      
+        
       - name: Archive Binary
         if: matrix.os == 'windows-latest'
         run: mv dist/SockEm.exe dist/SockEm-windows.exe
@@ -55,6 +70,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Debug: List Dist Directory
+        run: ls -R dist
+
       - name: Checkout Code
         uses: actions/checkout@v3
 
