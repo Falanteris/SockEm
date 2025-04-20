@@ -58,7 +58,7 @@ jobs:
       - name: Download or use bundled NSSM
         if: matrix.os == 'windows-latest'
         run: |
-          curl -L -o nssm.exe https://nssm.cc/release/nssm-2.24.zip
+          curl -o nssm-2.24.zip https://nssm.cc/release/nssm-2.24.zip
           tar -xf nssm-2.24.zip
           copy .\nssm-2.24\win64\nssm.exe .\
 
