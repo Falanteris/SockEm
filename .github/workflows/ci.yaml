@@ -67,7 +67,7 @@ jobs:
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: binaries
+          name: SockEm-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'windows.exe' }}
           path: dist/SockEm-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'windows.exe' }}
 
   release:
@@ -100,12 +100,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Release Asset
+      - name: Upload Release Windows Binary
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/SockEm-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'windows.exe' }}
-          asset_name: SockEm-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'windows.exe' }}
+          asset_path: SockEm-windows.exe.zip
+          asset_name: SockEm-windows.exe.zip
+          asset_content_type: application/octet-stream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Release Linux Binary
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: SockEm-linux.zip
+          asset_name: SockEm-linux.zip
           asset_content_type: application/octet-stream
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
