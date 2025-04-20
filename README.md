@@ -1,5 +1,10 @@
 # SockEm - A Live Connection Scanner  
 
+![Build Status](https://github.com/Falanteris/SockEm/actions/workflows/ci.yaml/badge.svg)
+
+![Coverage](https://codecov.io/gh/<your-username>/<your-repo>/branch/main/graph/badge.svg)
+
+SockEm is a tool for ...
 ## Features  
 
 - Checks active connections and compare them to a neat **JSON ruleset**.  
