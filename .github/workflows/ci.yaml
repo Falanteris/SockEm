@@ -89,8 +89,8 @@ jobs:
         uses: actions/upload-artifact@v4
         if: matrix.os == 'windows-latest'
         with:
-          name: SockEmInstaller.msi
-          path: SockEmInstaller.msi
+          name: SockEmInstaller-x64.msi
+          path: SockEmInstaller-x64.msi
 
   release:
     name: Create Release
@@ -150,8 +150,8 @@ jobs:
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: SockEmInstaller.msi
-          asset_name: SockEmInstaller.msi
+          asset_path: SockEmInstaller-x64.msi
+          asset_name: SockEmInstaller-x64.msi
           asset_content_type: application/octet-stream
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
