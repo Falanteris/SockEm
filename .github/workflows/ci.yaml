@@ -64,12 +64,17 @@ jobs:
 
       - name: Install WiX Toolset
         if: matrix.os == 'windows-latest'
+        shell: pwsh
         run: |
-          choco install wix --yes
+          choco install wixtoolset --yes
+            
+          Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+          
           refreshenv
 
       - name: Build MSI with WiX
         if: matrix.os == 'windows-latest'
+        shell: pwsh
         run: |
           candle sockem.wxs
           light sockem.wixobj -o SockEmInstaller.msi
