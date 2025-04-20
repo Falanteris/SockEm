@@ -85,7 +85,7 @@ jobs:
         with:
           name: SockEm-linux
       - name: Debug List Dist Directory
-        run: ls -R dist
+        run: ls
 
       - name: Checkout Code
         uses: actions/checkout@v3
