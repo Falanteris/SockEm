@@ -3,7 +3,7 @@
 
   <Product Id="*" Name="SockEm" Language="1033" Version="1.0.0.0" Manufacturer="Falanteris" UpgradeCode="{4dc34b1f-9685-4c1d-a0d4-9d1ee6d3c8c8}">
     <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
-    <MediaTemplate />
+    <MediaTemplate EmbedCab="yes"/>
 
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFilesFolder">
