@@ -20,14 +20,7 @@ jobs:
 
       - name: Install Dependencies
         run: pip install -r coverage
-      
-  build:
-    name: Build Binaries
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    steps:
+
       - name: Run Tests with Coverage
         run: |
           coverage run src/SockEm.py
@@ -39,6 +32,13 @@ jobs:
           files: coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
 
+      
+  build:
+    name: Build Binaries
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
