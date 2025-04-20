@@ -90,3 +90,5 @@ cython_debug/
 #pytest
 .pytest_cache
 __pycache__/
+
+*.exe

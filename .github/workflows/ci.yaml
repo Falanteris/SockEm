@@ -12,6 +12,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
+        arch: [x64]
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -28,6 +29,12 @@ jobs:
         run: |
           pyinstaller --onefile src/SockEm.py
         shell: bash
+
+      - name: Build Binary
+        if: matrix.os == 'windows-latest'
+        run: |
+          pyinstaller --onefile src/SockEm.py
+        shell: pwsh
 
       - name: Archive Binary
         if: matrix.os == 'ubuntu-latest'
@@ -60,7 +67,7 @@ jobs:
         run: |
           curl -o nssm-2.24.zip https://nssm.cc/release/nssm-2.24.zip
           tar -xf nssm-2.24.zip
-          copy .\nssm-2.24\win64\nssm.exe .\
+          copy .\nssm-2.24\win64\nssm_64.exe .\
 
       - name: Install WiX Toolset
         if: matrix.os == 'windows-latest'
@@ -85,12 +92,7 @@ jobs:
           name: SockEm-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'windows.exe' }}
           path: dist/SockEm-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'windows.exe' }}
 
-      - name: Upload MSI Installer
-        uses: actions/upload-artifact@v4
-        if: matrix.os == 'windows-latest'
-        with:
-          name: SockEmInstaller-x64.msi
-          path: SockEmInstaller-x64.msi
+
 
   release:
     name: Create Release
@@ -146,12 +148,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Release MSI Installer
+      - name: Upload Release Default Rules
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: SockEmInstaller-x64.msi
-          asset_name: SockEmInstaller-x64.msi
+          asset_path: rules
+          asset_name: rules
           asset_content_type: application/octet-stream
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
