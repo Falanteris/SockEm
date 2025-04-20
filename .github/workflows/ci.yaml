@@ -59,7 +59,7 @@ jobs:
       - name: Archive Binary
         if: matrix.os == 'ubuntu-latest'
         run: mv dist/SockEm dist/SockEm-linux
-        
+
       - name: Archive Binary
         if: matrix.os == 'windows-latest'
         run: mv dist/SockEm.exe dist/SockEm-windows.exe
@@ -70,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Debug: List Dist Directory
+      - name: Debug List Dist Directory
         run: ls -R dist
 
       - name: Checkout Code
