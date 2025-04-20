@@ -65,7 +65,7 @@ jobs:
         run: mv dist/SockEm.exe dist/SockEm-windows.exe
       
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: binaries
           path: dist/
@@ -77,13 +77,13 @@ jobs:
 
     steps:
       - name: Download Build Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: binaries
 
       - name: Debug List Dist Directory
         run: ls -R dist
-        
+
       - name: Checkout Code
         uses: actions/checkout@v3
 
