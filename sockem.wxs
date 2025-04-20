@@ -4,7 +4,7 @@
   <Product Id="*" Name="SockEm" Language="1033" Version="1.0.0.0" Manufacturer="Falanteris" UpgradeCode="{4dc34b1f-9685-4c1d-a0d4-9d1ee6d3c8c8}">
     <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
     <MediaTemplate />
-    
+
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFilesFolder">
         <Directory Id="INSTALLFOLDER" Name="SockEm">
@@ -20,32 +20,27 @@
       <ComponentRef Id="MainExecutable"/>
     </Feature>
 
-    <!-- Run NSSM to register SockEm as a service -->
+    <!-- Property to pass path to deferred action -->
+    <Property Id="CustomServicePath" Value="[INSTALLFOLDER]" />
+
     <CustomAction Id="InstallService"
                   Directory="INSTALLFOLDER"
                   ExeCommand="nssm install SockEmService &quot;[INSTALLFOLDER]SockEm.exe&quot;"
                   Execute="deferred"
-                  Return="ignore"
                   Impersonate="no"
-                  />
+                  Return="check" />
 
     <CustomAction Id="StartService"
                   Directory="INSTALLFOLDER"
                   ExeCommand="net start SockEmService"
                   Execute="deferred"
-                  Return="ignore"
                   Impersonate="no"
-                  />
+                  Return="check" />
 
+    <!-- Sequence of actions -->
     <InstallExecuteSequence>
-      <!-- Ensure the InstallService action happens after InstallInitialize -->
-      <Custom Action="InstallService" After="InstallInitialize"/>
-      
-      <!-- Ensure the StartService action happens after InstallService -->
-      <Custom Action="StartService" After="InstallService"/>
-      
-      <!-- Ensure InstallFinalize is the last action -->
-      <Custom Action="InstallFinalize" After="StartService"/>
+      <Custom Action="InstallService" After="InstallFiles">NOT Installed</Custom>
+      <Custom Action="StartService" After="InstallService">NOT Installed</Custom>
     </InstallExecuteSequence>
 
   </Product>
