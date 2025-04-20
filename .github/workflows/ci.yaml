@@ -7,7 +7,7 @@ on:
 
 jobs:
   coverage:
-    name: Run tests
+    name: coverage report
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -63,6 +63,12 @@ jobs:
       - name: Archive Binary
         if: matrix.os == 'windows-latest'
         run: mv dist/SockEm.exe dist/SockEm-windows.exe
+      
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries
+          path: dist/
 
   release:
     name: Create Release
@@ -70,9 +76,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Debug List Dist Directory
-        run: ls -R 
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: binaries
 
+      - name: Debug List Dist Directory
+        run: ls -R dist
+        
       - name: Checkout Code
         uses: actions/checkout@v3
 
