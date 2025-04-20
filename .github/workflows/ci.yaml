@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 jobs:
-  test:
+  coverage:
     name: Run tests
     runs-on: ubuntu-latest
     steps:
@@ -19,7 +19,7 @@ jobs:
           python-version: '3.x'
 
       - name: Install Dependencies
-        run: pip install -r coverage
+        run: pip install coverage
 
       - name: Run Tests with Coverage
         run: |
@@ -71,7 +71,7 @@ jobs:
 
     steps:
       - name: Debug List Dist Directory
-        run: ls -R dist
+        run: ls -R 
 
       - name: Checkout Code
         uses: actions/checkout@v3
