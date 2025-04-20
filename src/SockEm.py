@@ -72,7 +72,7 @@ def send_to_indexer(beat):
         return False
 
 def get_outbound_ip():
-    
+
     ip_addr = "127.0.0.1"
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -402,6 +402,11 @@ def run_scan(timestamp,hostname,proc_cache):
         if conn.get("state", "").upper().startswith("LISTEN") or conn.get("state", "").upper() == "ESTABLISHED":
             
             final_pid = conn['pid']
+            
+            if sys.platform == "linux":
+                
+                final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"
+
             if final_pid in proc_cache or final_pid not in process_running.keys():
                 # prevent duplicates, should be more advanced based on the smallest PID?
                 continue
@@ -411,10 +416,6 @@ def run_scan(timestamp,hostname,proc_cache):
                 # prevent duplicates for entries.
                 continue
             
-            if sys.platform == "linux":
-                
-                final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"
-
             if final_pid != "UNREADABLE":
                             
                 
