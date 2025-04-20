@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
 
-  <Product Id="*" Name="SockEm" Language="1033" Version="1.0.0.0" Manufacturer="YourName" UpgradeCode="PUT-GUID-HERE">
+  <Product Id="*" Name="SockEm" Language="1033" Version="1.0.0.0" Manufacturer="Falanteris" UpgradeCode="{4dc34b1f-9685-4c1d-a0d4-9d1ee6d3c8c8}">
     <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
     <MediaTemplate />
     
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFilesFolder">
         <Directory Id="INSTALLFOLDER" Name="SockEm">
-          <Component Id="MainExecutable" Guid="PUT-GUID-HERE">
-            <File Id="SockEmExe" Source="SockEm.exe" />
+          <Component Id="MainExecutable" Guid="{4dc34b1f-9685-4c1d-a0d4-9d1ee6d3c8c8}">
+            <File Id="SockEmExe" Source="dist/SockEm-windows.exe" />
             <File Id="NSSMExe" Source="nssm.exe" />
           </Component>
         </Directory>
