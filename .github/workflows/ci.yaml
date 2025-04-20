@@ -67,6 +67,8 @@ jobs:
             This release includes the latest binaries for SockEm.
           draft: false
           prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
@@ -75,3 +77,5 @@ jobs:
           asset_path: dist/SockEm-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'windows.exe' }}
           asset_name: SockEm-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'windows.exe' }}
           asset_content_type: application/octet-stream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
