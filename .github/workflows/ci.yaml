@@ -79,11 +79,11 @@ jobs:
       - name: Download Build Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: SockEm-windows.exe.zip
+          name: SockEm-windows.exe
       - name: Download Build Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: SockEm-linux.zip
+          name: SockEm-linux
       - name: Debug List Dist Directory
         run: ls -R dist
 
