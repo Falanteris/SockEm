@@ -300,7 +300,7 @@ def parse_netstat():
         keys = ["proto", "recv-q", "send-q", "src", "dst", "state", "pid"]
 
     try:
-        output = subprocess.check_output(cmd, text=True).strip()
+        output = subprocess.check_output(cmd, universal_newlines=True).strip()
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] Failed to execute netstat: {e}", file=sys.stderr)
         return []
