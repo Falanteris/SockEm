@@ -345,17 +345,22 @@ def parse_netstat():
             
             # if src_ip == dst_ip:
             #     continue
+            # src parsing
             conn_info["src"] = conn_info["src"].replace("[::]","0.0.0.0")
 
             conn_info["src"] = conn_info["src"].replace("[::1]","127.0.0.1")
             
             conn_info["src"] = conn_info["src"].replace("::1","127.0.0.1")
-            
+
+            conn_info["src"] = conn_info["src"].replace("::","127.0.0.1")
+            # dst parsing
             conn_info["dst"] = conn_info["dst"].replace("[::]","0.0.0.0")
 
             conn_info["dst"] = conn_info["dst"].replace("[::1]","127.0.0.1")
             
             conn_info["dst"] = conn_info["dst"].replace("::1","127.0.0.1")
+            
+            conn_info["dst"] = conn_info["dst"].replace("::","127.0.0.1")
             
             results.append(conn_info)
 
@@ -422,9 +427,9 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
             if final_pid != "UNREADABLE":
                             
                 
-                process_running[final_pid]["dst_port"] = dst[1]
+                process_running[final_pid]["dst_port"] = dst[-1]
 
-                process_running[final_pid]["src_port"] = src[1]
+                process_running[final_pid]["src_port"] = src[-1]
 
                 process_running[final_pid]["dst_ip"] = dst[0]
 
