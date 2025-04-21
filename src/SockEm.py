@@ -360,28 +360,31 @@ def parse_netstat():
             results.append(conn_info)
 
     return results
-def run_scan(timestamp,hostname,proc_cache):
+def run_scan(timestamp,hostname,proc_cache,process_info):
     
+    # process_info = {
+    #     "connections":[],
+    #     "processes":[],
+    #     "matched":[]
+    # }
+    old_process_info = process_info.copy()
+
     process_info = {
         "connections":[],
         "processes":[],
-        "matched":[]
+        "matched":[],
+        "exited":[],
     }
-    # if not threat_ips:
-        
-    #     print("[!] No threat IPs found, skipping scan.", file=sys.stderr)
-        
-    #     sys.exit(1)
- #   print("[*] Scanning active network connections...")
+
+    
     connections = parse_netstat()
     
     process_running = parse_ps_data()
 
+    process_info["processes"] = process_running
+
     prev_cache = copy.copy(proc_cache)
-
-
-    # process_info["processes"] = [f"{process_running[procs]["ID"],process_running[procs]["PROCESSNAME"],process_running[procs]["Memory_Usage"]}" for procs in process_running if process_running[procs]["ID"] not in prev_cache]
-
+    
     proc_cache = []
     
     for conn in connections:
@@ -439,6 +442,9 @@ def run_scan(timestamp,hostname,proc_cache):
     for items in missing:
         print(f"[...] INFO: Process {items} has exited..")
 
+        if items in old_process_info["processes"].keys():
+            process_info["exited"].append(old_process_info["processes"][items])
+
     return proc_cache,process_info
 def stamp_process(process):
     """Stamp process with information."""
@@ -476,11 +482,22 @@ if __name__ == "__main__":
     
     print(f"\n[+] Forensic Network Scan - {timestamp} (Hostname: {hostname})")
     
+    process_heartbeat = {
+        "connections":[],
+        "processes":[],
+        "matched":[],
+        "exited": []
+    }
+    
     while True:
-        proc_cache,process_heartbeat = run_scan(timestamp,hostname,proc_cache)
+        proc_cache,process_heartbeat = run_scan(
+            timestamp,hostname,proc_cache,process_heartbeat
+        )
         
         #with open("ps_heartbeat.json","w") as ps_heartbeat:
         #    json.dump(heartbeat_data,ps_heartbeat)
+        print(process_heartbeat["exited"])
+
         with ThreadPoolExecutor(max_workers=50) as executor:
             results = []
             count = 0
@@ -492,6 +509,10 @@ if __name__ == "__main__":
             for event in process_heartbeat["connections"]:
                 stamped = stamp_process(event)
                 stamped["type"] = "SockEm Connection Dump"
+                results.append(executor.submit(send_to_indexer, stamped))
+            for event in process_heartbeat["exited"]:
+                stamped = stamp_process(event)
+                stamped["type"] = "SockEm Process Terminaton Notification"
                 results.append(executor.submit(send_to_indexer, stamped))
 
             for result in results:
