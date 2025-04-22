@@ -55,18 +55,19 @@ def send_to_indexer(beat):
     )
     if sys.platform == "win32":
         try:
-            check_name = subprocess.run(["powershell",
+            cmd = subprocess.check_output(["powershell",
             "-Command", 
-            f"(Get-Command {beat["PROCESSNAME"]}).Path"], universal_newlines=True)
-            if check_name.returncode != 0 or not check_name.stdout:
-                raise subprocess.CalledProcessError("Command failed",f"powershell -Command (Get-Command {beat["PROCESSNAME"]}).Path")
-            check_name = check_name.stdout.decode().strip()
-
-        except subprocess.CalledProcessError as e:
-            check_name = False
+            f"(Get-Command {beat["PROCESSNAME"]}).Path"],universal_newlines=True)
+            check_name = cmd.strip()
+            if "CommandNotFoundException" in check_name:
+                print("Is not found")
+                raise Exception("Command not found, defaulting to detected ps command")
+        except Exception as e:
+            check_name = beat["PROCESSNAME"]
         # Check if the process name is valid
-        beat["PROCESSNAME"] = check_name if check_name else beat["PROCESSNAME"]
+        beat["PROCESSNAME"] = check_name
     auth_token = base64.b64encode(f"{username}:{password}".encode()).decode()
+    print("CHECKNAME ==",beat["PROCESSNAME"])
     
     headers = {
             "Content-Type": "application/json",
@@ -128,7 +129,11 @@ def match_process_pair(rule,process):
                 print(rule["description"].format(process),end=' ')
                 print(rule["rule_id"])
 
-                return rule["rule_id"],rule["description"].format(process),rule["severity"],process
+                process["rule_description"] = rule["description"]
+                process["severity"] = rule["severity"]
+                process["rule_id"] = rule["rule_id"]
+                
+                return process
 
 def match_blacklist_process(rule,process):    
     
@@ -141,11 +146,12 @@ def match_blacklist_process(rule,process):
         real_name = proc_parts[-1]
         if real_name.startswith(blacklist):
             if not check_detected(process["ID"]):
-                print("[{}]".format(rule["severity"]),end=' ')
-                print(rule["description"].format(process),end=' ')
-                print(rule["rule_id"])
                 
-                return rule["rule_id"],rule["description"].format(process),rule["severity"],process
+                process["rule_description"] = rule["description"]
+                process["severity"] = rule["severity"]
+                process["rule_id"] = rule["rule_id"]
+                
+                return process
     
 def match_state(rule,process):
     rule_id = rule["rule_id"]
@@ -168,7 +174,11 @@ def match_state(rule,process):
             print(rule["description"].format(process),end=' ')
             print(rule["rule_id"])
             
-            return rule["rule_id"],rule["description"].format(process),rule["severity"],process
+            process["rule_description"] = rule["description"]
+            process["severity"] = rule["severity"]
+            process["rule_id"] = rule["rule_id"]
+            
+            return process
             
 def match_blacklist_port(rule,process):
     rule_id = rule["rule_id"]
@@ -185,6 +195,11 @@ def match_blacklist_port(rule,process):
                 print("[{}]".format(rule["severity"]),end=' ')
                 print(rule["description"].format(process),end=' ')
                 print(rule["rule_id"])
+
+                process["rule_description"] = rule["description"]
+                process["severity"] = rule["severity"]
+                process["rule_id"] = rule["rule_id"]
+
                 return rule["rule_id"],rule["description"].format(process),rule["severity"],process
 def load_ruleset():
     for rules in RULESET:
@@ -199,36 +214,32 @@ def load_ruleset():
         
 def check_process_with_ruleset(proc_data):
     # load rulesets
-    keys = ("rule_id","description","severity","process_data")
+    # keys = ("rule_id","description","severity","process_data")
     
     matches = []
 
     for rules in ruleset:
-        
+        result_match = None
         if "match_state" in rules.keys():
             result_match = match_state(rules,proc_data)
-            if result_match:
-                matches.append(dict(zip(keys,result_match)))
-
+            
             
         if "match_blacklist_process" in rules.keys():
             result_match = match_blacklist_process(rules,proc_data)
-            if result_match:
-                matches.append(dict(zip(keys,result_match)))
-            
+                        
             
             
         if "match_blacklist_port" in rules.keys():
             result_match = match_blacklist_port(rules,proc_data)
             
-            if result_match:
-                matches.append(dict(zip(keys,result_match)))
             
 
         if "match_process_pair" in rules.keys():
             result_match = match_process_pair(rules,proc_data)  
-            if result_match:
-                matches.append(dict(zip(keys,result_match)))
+        
+        if result_match:
+            matches.append(result_match)
+
     return matches
 
 def parse_ps_data():
