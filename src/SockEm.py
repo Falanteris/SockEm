@@ -28,6 +28,7 @@ import glob
 import json
 import base64
 import ssl
+from urllib.parse import quote_plus
 
 DAEMONIZE = True if os.getenv("DAEMONIZE") == "1" else False
 # OpenSearch credentials
@@ -61,8 +62,8 @@ def send_to_indexer(beat):
             print(f"[ERROR] Failed to execute command: {e}", file=sys.stderr)
             return False
         # Check if the process name is valid
-        beat["PROCESSNAME"] = check_name if check_name else beat["PROCESSNAME"]
-        
+        beat["PROCESSNAME"] = quote_plus(check_name) if check_name else beat["PROCESSNAME"]
+
     auth_token = base64.b64encode(f"{username}:{password}".encode()).decode()
     
     headers = {
