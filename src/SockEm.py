@@ -47,17 +47,29 @@ ruleset = []
 
 detected = []
 
-
 def send_to_indexer(beat):
     """Send data to the indexer."""
     conn = http.client.HTTPSConnection(
         indexer_host, indexer_port, context=ssl._create_unverified_context()
     )
+    if sys.platform == "win32":
+        try:
+            check_name = subprocess.check_output(["powershell",
+            "-Command", 
+            f"(Get-Command {beat["PROCESSNAME"]}).Path"]).decode().strip()
+        except subprocess.CalledProcessError as e:
+            print(f"[ERROR] Failed to execute command: {e}", file=sys.stderr)
+            return False
+        # Check if the process name is valid
+        beat["PROCESSNAME"] = check_name if check_name else beat["PROCESSNAME"]
+        
     auth_token = base64.b64encode(f"{username}:{password}".encode()).decode()
+    
     headers = {
             "Content-Type": "application/json",
             "Authorization": f"Basic {auth_token}"
     }
+    
     try:
         conn.request(
             "POST", "/sock-em-alerts/_doc",
@@ -65,8 +77,19 @@ def send_to_indexer(beat):
         )
         # Handle response
         response = conn.getresponse()
+        
         conn.close()
-
+        
+        if response.status == 201:
+        
+            json_data = json.loads(response.read().decode())
+        
+            doc_id = json_data["_id"]
+        
+            if sys.platform == "win32":
+                # Update the process name for Windows
+                update_process_name_for_windows(doc_id, beat)
+                
         return response.status == 201
     except (TimeoutError, ConnectionRefusedError):
         return False
