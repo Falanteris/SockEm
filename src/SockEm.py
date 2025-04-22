@@ -53,13 +53,20 @@ def send_to_indexer(beat):
     conn = http.client.HTTPSConnection(
         indexer_host, indexer_port, context=ssl._create_unverified_context()
     )
+
     if sys.platform == "win32":
+
         try:
+            wmi_process = f"""
+    Get-WmiObject Win32_Process |
+    Where-Object {{ $_.Name -like '{beat["PROCESSNAME"]}.exe' }} |
+    Select-Object -First 1 -ExpandProperty ExecutablePath
+    """
             cmd = subprocess.check_output(["powershell",
-            "-Command", 
-            f"(Get-Command {beat["PROCESSNAME"]}).Path"],universal_newlines=True)
+            "-Command", wmi_process],universal_newlines=True)
             check_name = cmd.strip()
-            if "CommandNotFoundException" in check_name:
+            print(cmd)
+            if len(check_name) == 0:
                 print("Is not found")
                 raise Exception("Command not found, defaulting to detected ps command")
         except Exception as e:
