@@ -89,7 +89,7 @@ def send_to_indexer(beat):
         
         return response.status == 201
     except (TimeoutError, ConnectionRefusedError) as e:
-        print(e)
+        print("Failed when trying to send to OpenSearch: ",e)
         
         return False
 
@@ -151,6 +151,10 @@ def match_blacklist_process(rule,process):
         if real_name.startswith(blacklist):
             if not check_detected(process["ID"]):
                 
+                print("[{}]".format(rule["severity"]),end=' ')
+                print(rule["description"].format(process),end=' ')
+                print(rule["rule_id"])
+
                 process["rule_description"] = rule["description"]
                 process["severity"] = rule["severity"]
                 process["rule_id"] = rule["rule_id"]
@@ -226,23 +230,28 @@ def check_process_with_ruleset(proc_data):
         result_match = None
         if "match_state" in rules.keys():
             result_match = match_state(rules,proc_data)
-            
+            if result_match:
+                matches.append(result_match)
+
             
         if "match_blacklist_process" in rules.keys():
             result_match = match_blacklist_process(rules,proc_data)
-                        
+            if result_match:
+                        matches.append(result_match)                        
             
             
         if "match_blacklist_port" in rules.keys():
             result_match = match_blacklist_port(rules,proc_data)
-            
+            if result_match:
+                matches.append(result_match)
+    
             
 
         if "match_process_pair" in rules.keys():
             result_match = match_process_pair(rules,proc_data)  
         
-        if result_match:
-            matches.append(result_match)
+            if result_match:
+                matches.append(result_match)
 
     return matches
 
