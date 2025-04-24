@@ -40,8 +40,8 @@ indexer_host = os.getenv("INDEXER_HOST", "localhost")
 
 indexer_port = os.getenv("INDEXER_PORT", 9200)
 
-
 RULESET = glob.glob("ruleset/*.json")
+
 extracted_rid = []
 
 ruleset = []
@@ -65,16 +65,13 @@ def send_to_indexer(beat):
             cmd = subprocess.check_output(["powershell",
             "-Command", wmi_process],universal_newlines=True)
             check_name = cmd.strip()
-            print(cmd)
             if len(check_name) == 0:
-                print("Is not found")
                 raise Exception("Command not found, defaulting to detected ps command")
         except Exception as e:
             check_name = beat["PROCESSNAME"]
         # Check if the process name is valid
         beat["PROCESSNAME"] = check_name
     auth_token = base64.b64encode(f"{username}:{password}".encode()).decode()
-    print("CHECKNAME ==",beat["PROCESSNAME"])
     
     headers = {
             "Content-Type": "application/json",
@@ -381,22 +378,23 @@ def parse_netstat():
             # if src_ip == dst_ip:
             #     continue
             # src parsing
+            
             conn_info["src"] = conn_info["src"].replace("[::]","0.0.0.0")
 
             conn_info["src"] = conn_info["src"].replace("[::1]","127.0.0.1")
             
-            conn_info["src"] = conn_info["src"].replace("::1","127.0.0.1")
+            conn_info["src"] = conn_info["src"].replace(":::","127.0.0.1:")
 
-            conn_info["src"] = conn_info["src"].replace("::","127.0.0.1")
+            conn_info["src"] = conn_info["src"].replace("::1","127.0.0.1")
             # dst parsing
             conn_info["dst"] = conn_info["dst"].replace("[::]","0.0.0.0")
 
             conn_info["dst"] = conn_info["dst"].replace("[::1]","127.0.0.1")
             
+            conn_info["dst"] = conn_info["dst"].replace(":::","127.0.0.1:")
+            
             conn_info["dst"] = conn_info["dst"].replace("::1","127.0.0.1")
-            
-            conn_info["dst"] = conn_info["dst"].replace("::","127.0.0.1")
-            
+
             results.append(conn_info)
 
     return results
