@@ -473,9 +473,9 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
 
                 process_running[final_pid]["src_port"] = src[-1]
 
-                process_running[final_pid]["dst_ip"] = dst[0]
+                process_running[final_pid]["dst_ip"] = dst_ip
 
-                process_running[final_pid]["src_ip"] = src[0]
+                process_running[final_pid]["src_ip"] = src_ip
                 
                 matches = check_process_with_ruleset(process_running[final_pid])
                 if len(matches) > 0:
