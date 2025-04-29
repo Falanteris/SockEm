@@ -36,7 +36,7 @@ username = os.getenv("INDEXER_USERNAME", "admin")
 
 password = os.getenv("INDEXER_PASSWORD", "password")
 
-indexer_host = os.getenv("INDEXER_HOST", "localhost")
+indexer_host = os.getenv("INDEXER_HOST")
 
 indexer_port = os.getenv("INDEXER_PORT", 9200)
 
@@ -47,6 +47,23 @@ extracted_rid = []
 ruleset = []
 
 detected = []
+
+def process_id_enhancement(pid):
+    
+    if sys.platform == "win32":
+        parent_pid = subprocess.check_output(["wmic",
+        "process","where",
+        f"(processid={pid})","get", "parentprocessid"],
+        universal_newlines=True).strip().split("\n")[-1]
+    else:
+        parent_pid = subprocess.check_output(["ps",
+        "-o",
+        f"ppid={pid}"],universal_newlines=True).strip().split("\n")[-1].strip()
+
+    return {
+        "parent_pid":parent_pid
+    }
+
 
 def send_to_indexer(beat):
     """Send data to the indexer."""
@@ -456,6 +473,15 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
             if sys.platform == "linux":
                 
                 final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"
+                
+            process_running[final_pid]["state"] = conn.get("state","").upper()
+
+            process_running[final_pid]["parent_id"] = process_id_enhancement(final_pid)["parent_pid"]
+
+            process_running[final_pid]["first_seen"] = datetime.now(timezone.utc).isoformat()
+            
+            process_running[final_pid]["last_seen"] = None
+
 
             if final_pid in proc_cache or final_pid not in process_running.keys():
                 # prevent duplicates, should be more advanced based on the smallest PID?
@@ -476,8 +502,9 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
                 process_running[final_pid]["dst_ip"] = dst[0]
 
                 process_running[final_pid]["src_ip"] = src[0]
-                
+
                 matches = check_process_with_ruleset(process_running[final_pid])
+
                 if len(matches) > 0:
                     process_info["matched"] += matches
                 
@@ -490,6 +517,9 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
         print(f"[...] INFO: Process {items} has exited..")
 
         if items in old_process_info["processes"].keys():
+            
+            old_process_info["processes"][items]["last_seen"] = datetime.now(timezone.utc).isoformat()
+
             process_info["exited"].append(old_process_info["processes"][items])
 
     return proc_cache,process_info
@@ -543,27 +573,28 @@ if __name__ == "__main__":
         
         #with open("ps_heartbeat.json","w") as ps_heartbeat:
         #    json.dump(heartbeat_data,ps_heartbeat)
-        print(process_heartbeat["exited"])
+        [print(hb) for hb in process_heartbeat["exited"]]
+        # indexer host is configured, attempting to integrate new data to indexer..
+        if indexer_host:
+            with ThreadPoolExecutor(max_workers=50) as executor:
+                results = []
+                count = 0
+                for event in process_heartbeat["matched"]:
+                    stamped = stamp_process(event)
+                    stamped["type"] = "SockEm Alert"
+                    results.append(executor.submit(send_to_indexer, stamped))
+                    count+=1
+                for event in process_heartbeat["connections"]:
+                    stamped = stamp_process(event)
+                    stamped["type"] = "SockEm Connection Dump"
+                    results.append(executor.submit(send_to_indexer, stamped))
+                for event in process_heartbeat["exited"]:
+                    stamped = stamp_process(event)
+                    stamped["type"] = "SockEm Process Terminaton Notification"
+                    results.append(executor.submit(send_to_indexer, stamped))
 
-        with ThreadPoolExecutor(max_workers=50) as executor:
-            results = []
-            count = 0
-            for event in process_heartbeat["matched"]:
-                stamped = stamp_process(event)
-                stamped["type"] = "SockEm Alert"
-                results.append(executor.submit(send_to_indexer, stamped))
-                count+=1
-            for event in process_heartbeat["connections"]:
-                stamped = stamp_process(event)
-                stamped["type"] = "SockEm Connection Dump"
-                results.append(executor.submit(send_to_indexer, stamped))
-            for event in process_heartbeat["exited"]:
-                stamped = stamp_process(event)
-                stamped["type"] = "SockEm Process Terminaton Notification"
-                results.append(executor.submit(send_to_indexer, stamped))
-
-            for result in results:
-                result.result()
+                for result in results:
+                    result.result()
 
         if not DAEMONIZE:
             
