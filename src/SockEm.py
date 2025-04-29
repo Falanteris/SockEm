@@ -439,9 +439,9 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
         
         dst = conn["dst"].split(":")
     
-        src_ip = src[0]
+        src_ip = src[0] if len(src) < 8 else ":".join(src[:-1]) # detect if the IP isn't hexadecimal, if it is, join
     
-        dst_ip = dst[0]
+        dst_ip = dst[0] if len(dst) < 8 else ":".join(dst[:-1]) # detect if the IP isn't hexadecimal, if it is, join
 
         if len(src) > 1 and src[1] != "0":
             active_listening = src[1]
