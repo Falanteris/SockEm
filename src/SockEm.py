@@ -433,21 +433,18 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
     prev_cache = copy.copy(proc_cache)
     
     proc_cache = []
-    
+
+    check_v4v6 = lambda socket_vercheck: socket_vercheck[0] if len(socket_vercheck) == 2 else ":".join(socket_vercheck[:-1])
+
     for conn in connections:
         src = conn["src"].split(":")
         
         dst = conn["dst"].split(":")
-    
-        src_ip = src[0] if len(src) == 2 else ":".join(src[:-1]) # detect if the IP isn't hexadecimal, if it is, join
-    
-        dst_ip = dst[0] if len(dst) == 2 else ":".join(dst[:-1]) # detect if the IP isn't hexadecimal, if it is, join
 
-        if len(src) > 1 and src[1] != "0":
-            active_listening = src[1]
-        
-        if len(dst) > 1 and dst[1] != "0":
-            active_listening = dst[1]
+        src_ip = check_v4v6(src) # detect if the IP isn't hexadecimal, if it is, join
+    
+        dst_ip = check_v4v6(dst) # detect if the IP isn't hexadecimal, if it is, join
+
         
         if conn.get("state", "").upper().startswith("LISTEN") or conn.get("state", "").upper() == "ESTABLISHED":
             
@@ -467,8 +464,7 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
                 continue
             
             if final_pid != "UNREADABLE":
-                            
-                
+
                 process_running[final_pid]["dst_port"] = dst[-1]
 
                 process_running[final_pid]["src_port"] = src[-1]
