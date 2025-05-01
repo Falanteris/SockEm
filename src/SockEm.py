@@ -489,6 +489,7 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
                 
                 process_info["connections"].append(process_running[final_pid])
                 
+                process_info["processes"][final_pid] = process_running[final_pid]
           
     missing = list(set(prev_cache).difference(set(proc_cache)))
 
