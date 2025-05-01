@@ -425,9 +425,11 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
 
     
     connections = parse_netstat()
-    
+    print("netstat done")
+    print(len(connections))
     process_running = parse_ps_data()
-
+    print("ps done")
+    print(len(process_running.keys()))
     process_info["processes"] = process_running
 
     prev_cache = copy.copy(proc_cache)
@@ -455,8 +457,9 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
                 final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"
                 
             process_running[final_pid]["state"] = conn.get("state","").upper()
+            # if sys.platform == "linux":
 
-            process_running[final_pid]["parent_id"] = process_id_enhancement(final_pid)["parent_pid"]
+            #     process_running[final_pid]["parent_id"] = process_id_enhancement(final_pid)["parent_pid"]
 
             process_running[final_pid]["first_seen"] = datetime.now(timezone.utc).isoformat()
             
@@ -488,9 +491,9 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
                     process_info["matched"] += matches
                 
                 process_info["connections"].append(process_running[final_pid])
-                
+
                 process_info["processes"][final_pid] = process_running[final_pid]
-          
+    print("Auditing done.")
     missing = list(set(prev_cache).difference(set(proc_cache)))
 
     for items in missing:
