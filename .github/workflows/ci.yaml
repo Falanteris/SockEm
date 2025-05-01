@@ -37,7 +37,7 @@ jobs:
         shell: pwsh
 
       - name: Archive Binary
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-22.04'
         run: mv dist/SockEm dist/SockEm-linux
 
       - name: Archive Binary
