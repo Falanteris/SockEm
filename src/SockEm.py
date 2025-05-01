@@ -58,7 +58,7 @@ def process_id_enhancement(pid):
     else:
         parent_pid = subprocess.check_output(["ps",
         "-o",
-        f"ppid={pid}"],universal_newlines=True).strip().split("\n")[-1].strip()
+        "ppid=",pid],universal_newlines=True).strip().split("\n")[-1].strip()
 
     return {
         "parent_pid":parent_pid
