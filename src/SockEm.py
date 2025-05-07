@@ -30,6 +30,7 @@ import base64
 import ssl
 from urllib.parse import quote_plus
 
+
 DAEMONIZE = True if os.getenv("DAEMONIZE") == "1" else False
 # OpenSearch credentials
 username = os.getenv("INDEXER_USERNAME", "admin")
@@ -40,13 +41,26 @@ indexer_host = os.getenv("INDEXER_HOST")
 
 indexer_port = os.getenv("INDEXER_PORT", 9200)
 
-RULESET = glob.glob("ruleset/*.json")
+MAX_RETRIES = os.getenv("MAX_RETRIES") or 3
 
+GLOBAL_TIMEOUT = os.getenv("GLOBAL_TIMEOUT") or 5
+
+RULESET = glob.glob("ruleset/*.json")
+    
 extracted_rid = []
 
 ruleset = []
 
 detected = []
+
+config_data = {}
+
+severity_chart = {
+    "INFO":1,
+    "MEDIUM":2,
+    "HIGH":3,
+    "CRITICAL":4
+}
 
 def process_id_enhancement(pid):
     
@@ -63,16 +77,69 @@ def process_id_enhancement(pid):
     return {
         "parent_pid":parent_pid
     }
+def send_to_receiver(beat):
+    """Send data to receiver for SOAR"""
+    ### skips if the alert level doesn't match
+
+    fullpath = config_data["url"]
+
+    parsed = urlparse(fullpath)
+
+    receiver_host,receiver_port = parsed.netloc.split(":") if ":" in parsed.netloc else (parsed.netloc, 443)
+
+    conn = http.client.HTTPSConnection(
+        receiver_host, receiver_port, context=ssl._create_unverified_context(),timeout=GLOBAL_TIMEOUT
+    )
+
+    if sys.platform == "win32":
+
+        try:
+            wmi_process = f"""
+    Get-WmiObject Win32_Process |
+    Where-Object {{ $_.Name -like '{beat["PROCESSNAME"]}.exe' }} |
+    Select-Object -First 1 -ExpandProperty ExecutablePath
+    """
+            cmd = subprocess.check_output(["powershell",
+            "-Command", wmi_process],universal_newlines=True)
+            check_name = cmd.strip()
+            if len(check_name) == 0:
+                raise Exception("Command not found, defaulting to detected ps command")
+
+        except Exception as e:
+            check_name = beat["PROCESSNAME"]
+        # Check if the process name is valid
+        beat["PROCESSNAME"] = check_name
+    attempt = 0
+    result = False
+    headers = {
+            "Content-Type": "application/json"
+    }
+    while MAX_RETRIES > attempt:
+        try:
+            conn.request(
+                "POST", parsed.path,
+                body=json.dumps(beat), headers=headers
+            )
+            # Handle response
+            response = conn.getresponse()
+            conn.close()
+            
+            if response.status >= 200 and response.status < 300:
+                result = True
+                break
+        except (TimeoutError, ConnectionRefusedError, socket.gaierror) as e:
+            print("Failed when trying to send to Receiver: ",e)
+            attempt+=1
+
+    return result
 
 
 def send_to_indexer(beat):
     """Send data to the indexer."""
     conn = http.client.HTTPSConnection(
-        indexer_host, indexer_port, context=ssl._create_unverified_context()
+        indexer_host, indexer_port, context=ssl._create_unverified_context(),timeout=GLOBAL_TIMEOUT
     )
-
     if sys.platform == "win32":
-
         try:
             wmi_process = f"""
     Get-WmiObject Win32_Process |
@@ -89,26 +156,31 @@ def send_to_indexer(beat):
         # Check if the process name is valid
         beat["PROCESSNAME"] = check_name
     auth_token = base64.b64encode(f"{username}:{password}".encode()).decode()
-    
     headers = {
             "Content-Type": "application/json",
             "Authorization": f"Basic {auth_token}"
     }
-    
-    try:
-        conn.request(
-            "POST", "/sock-em-alerts/_doc",
-            body=json.dumps(beat), headers=headers
-        )
-        # Handle response
-        response = conn.getresponse()
-        conn.close()
-        
-        return response.status == 201
-    except (TimeoutError, ConnectionRefusedError) as e:
-        print("Failed when trying to send to OpenSearch: ",e)
-        
-        return False
+    attempt = 0
+    result = False
+    while MAX_RETRIES > attempt:
+        try:
+            conn.request(
+                "POST", "/sock-em-alerts/_doc",
+                body=json.dumps(beat), headers=headers
+            )
+            # Handle response
+            response = conn.getresponse()
+            conn.close()
+            
+            if response.status == 201:
+                result = True
+                break
+        except (TimeoutError, ConnectionRefusedError, socket.gaierror) as e:
+            print("Failed when trying to send to OpenSearch: ",e)
+            attempt+=1
+            result = False
+
+    return result
 
 def get_outbound_ip():
 
@@ -226,6 +298,18 @@ def match_blacklist_port(rule,process):
                 process["rule_id"] = rule["rule_id"]
 
                 return rule["rule_id"],rule["description"].format(process),rule["severity"],process
+def load_receivers():
+    
+    global config_data
+    
+    with open("shuffler/config.json") as config:
+            config_data = json.load(config)
+    
+    config_data = config_data
+    
+    config_data["alert_level"] = severity_chart.get(config_data["alert_level"])
+    
+
 def load_ruleset():
     for rules in RULESET:
         with open(rules,"r") as reader:
@@ -425,11 +509,9 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
 
     
     connections = parse_netstat()
-    print("netstat done")
-    print(len(connections))
+    
     process_running = parse_ps_data()
-    print("ps done")
-    print(len(process_running.keys()))
+    
     process_info["processes"] = process_running
 
     prev_cache = copy.copy(proc_cache)
@@ -493,7 +575,7 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
                 process_info["connections"].append(process_running[final_pid])
 
                 process_info["processes"][final_pid] = process_running[final_pid]
-    print("Auditing done.")
+    
     missing = list(set(prev_cache).difference(set(proc_cache)))
 
     for items in missing:
@@ -518,6 +600,9 @@ def stamp_process(process):
 if __name__ == "__main__":
     
     load_ruleset()
+    load_receivers()
+    print(config_data)
+
 
     print("""
        _____            _    ______ __  __ 
@@ -566,6 +651,7 @@ if __name__ == "__main__":
                     stamped = stamp_process(event)
                     stamped["type"] = "SockEm Alert"
                     results.append(executor.submit(send_to_indexer, stamped))
+                    results.append(executor.submit(send_to_receiver, stamped))
                     count+=1
                 for event in process_heartbeat["connections"]:
                     stamped = stamp_process(event)

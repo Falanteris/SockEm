@@ -8,7 +8,7 @@
             }
         ],
         "severity":"MEDIUM",
-        "description":"An unexpected connection is active,  {}"
+        "description":"An unexpected connection is active"
     },
     {
         "rule_id":100002,
@@ -17,7 +17,7 @@
             "socat"
         ],
         "severity":"CRITICAL",
-        "description":"Potential Reverse-Bind Shell detected {}"
+        "description":"Potential Reverse-Bind Shell detected"
     },
     {
         "rule_id":100007,
@@ -47,7 +47,7 @@
             4444
         ],
         "severity":"MEDIUM",
-        "description":"A suspicious port is actively listening.. {}"
+        "description":"A suspicious port is actively listening.."
     },
     {
         "rule_id":100004,
@@ -56,7 +56,7 @@
 
         },
         "severity":"HIGH",
-        "description":"High memory consumption from process {}"
+        "description":"High memory consumption from process"
     }
     
 ]
