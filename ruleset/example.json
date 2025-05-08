@@ -28,7 +28,7 @@
             "./"
         ],
         "severity":"MEDIUM",
-        "description":"Programmed script running in the background {}"
+        "description":"Programmed script running in the background"
     },
     {
         "rule_id":100009,
@@ -38,7 +38,7 @@
             "rsync"
         ],
         "severity":"MEDIUM",
-        "description":"Server is remoting another server {}"
+        "description":"Server is remoting another server"
     },
     {
         "rule_id":100003,

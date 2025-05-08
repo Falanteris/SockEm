@@ -45,6 +45,10 @@ MAX_RETRIES = os.getenv("MAX_RETRIES") or 3
 
 GLOBAL_TIMEOUT = os.getenv("GLOBAL_TIMEOUT") or 5
 
+SHUFFLE_URL = os.getenv("SHUFFLE_URL")
+
+NOTIFY_LEVEL = os.getenv("NOTIFY_LEVEL")
+
 RULESET = glob.glob("ruleset/*.json")
     
 extracted_rid = []
@@ -299,15 +303,14 @@ def match_blacklist_port(rule,process):
 
                 return rule["rule_id"],rule["description"].format(process),rule["severity"],process
 def load_receivers():
-    
     global config_data
+
+    config_data = {
+        "url":SHUFFLE_URL,
+        "alert_level": severity_chart.get(NOTIFY_LEVEL)
     
-    with open("shuffler/config.json") as config:
-            config_data = json.load(config)
+    }
     
-    config_data = config_data
-    
-    config_data["alert_level"] = severity_chart.get(config_data["alert_level"])
     
 
 def load_ruleset():
