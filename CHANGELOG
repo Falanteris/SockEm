@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## [Unreleased]
+## [2025-09-05]
 - SockEm is now able to send data to Shuffler.
     - Examples can be found in the `soar_examples` folder.
     - Configuration for the integration is located in the `shuffler` folder.
