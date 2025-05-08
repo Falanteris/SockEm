@@ -209,8 +209,8 @@ def check_detected(pid):
     
     detected.append(pid)
 
-    return False
-def match_process_pair(rule,process):    
+def match_process_pair(rule,process):
+    global detected    
     rule_id = rule["rule_id"]
 
     if "dst_port" not in process.keys():
