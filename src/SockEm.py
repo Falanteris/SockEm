@@ -202,6 +202,8 @@ def get_outbound_ip():
     return ip_addr
     
 def check_detected(pid):
+    global detected
+    
     if pid in detected:
         return True
     
