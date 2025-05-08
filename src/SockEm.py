@@ -84,7 +84,7 @@ def process_id_enhancement(pid):
 def send_to_receiver(beat):
     """Send data to receiver for SOAR"""
     ### skips if the alert level doesn't match
-    if config_data["alert_level"] >= severity_chart.get(beat["severity"],0):
+    if config_data["alert_level"] > severity_chart.get(beat["severity"],0):
         return False
 
     fullpath = config_data["url"]
@@ -203,7 +203,7 @@ def get_outbound_ip():
     
 def check_detected(pid):
     global detected
-    
+
     if pid in detected:
         return True
     
