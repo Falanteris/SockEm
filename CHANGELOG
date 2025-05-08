@@ -1,0 +1,11 @@
+# CHANGELOG
+
+## [Unreleased]
+- SockEm is now able to send data to Shuffler.
+    - Examples can be found in the `soar_examples` folder.
+    - Configuration for the integration is located in the `shuffler` folder.
+        - Users need to download the `shuffler` folder to start sending SockEm data to Shuffler.
+- Quality of Life (QOL) environment variables have been added to enhance integration retries:
+    - `GLOBAL_TIMEOUT`: Default is 5 seconds.
+    - `MAX_RETRIES`: Default is 3 retries.
+    - These parameters can be configured via Environment Variables.
