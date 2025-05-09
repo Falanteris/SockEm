@@ -21,6 +21,7 @@ import socket
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor
+import threading
 import time
 import os
 import copy
@@ -97,49 +98,48 @@ def send_to_receiver(beat):
         receiver_host, receiver_port, context=ssl._create_unverified_context(),timeout=GLOBAL_TIMEOUT
     )
 
-    if sys.platform == "win32":
+    # if sys.platform == "win32":
 
-        try:
-            wmi_process = f"""
-    Get-WmiObject Win32_Process |
-    Where-Object {{ $_.Name -like '{beat["PROCESSNAME"]}.exe' }} |
-    Select-Object -First 1 -ExpandProperty ExecutablePath
-    """
-            cmd = subprocess.check_output(["powershell",
-            "-Command", wmi_process],universal_newlines=True)
-            check_name = cmd.strip()
-            if len(check_name) == 0:
-                raise Exception("Command not found, defaulting to detected ps command")
+    #     try:
+    #         wmi_process = f"""
+    # Get-WmiObject Win32_Process |
+    # Where-Object {{ $_.Name -like '{beat["PROCESSNAME"]}.exe' }} |
+    # Select-Object -First 1 -ExpandProperty ExecutablePath
+    # """
+    #         cmd = subprocess.check_output(["powershell",
+    #         "-Command", wmi_process],universal_newlines=True)
+    #         check_name = cmd.strip()
+    #         if len(check_name) == 0:
+    #             raise Exception("Command not found, defaulting to detected ps command")
 
-        except Exception as e:
-            check_name = beat["PROCESSNAME"]
-        # Check if the process name is valid
-        beat["PROCESSNAME"] = check_name
+    #     except Exception as e:
+    #         check_name = beat["PROCESSNAME"]
+    #     # Check if the process name is valid
+    #     beat["PROCESSNAME"] = check_name
     attempt = 0
     result = False
     headers = {
             "Content-Type": "application/json"
     }
-    while MAX_RETRIES > attempt:
-        try:
-            conn.request(
-                "POST", parsed.path,
-                body=json.dumps(beat), headers=headers
-            )
-            # Handle response
-            response = conn.getresponse()
-            conn.close()
+    # while MAX_RETRIES > attempt:
+    try:
+        conn.request(
+            "POST", parsed.path,
+            body=json.dumps(beat), headers=headers
+        )
+        # Handle response
+        response = conn.getresponse()
+        conn.close()
+        
+        if response.status >= 200 and response.status < 300:
+            result = True
             
-            if response.status >= 200 and response.status < 300:
-                result = True
-                break
-        except (TimeoutError, ConnectionRefusedError, socket.gaierror) as e:
-            print("Failed when trying to send to Receiver: ",e)
-            attempt+=1
-        except http.client.CannotSendRequest as e:
-            if e == "Request-Sent":
-                print("Terminating because our client sent the request already")
-                break
+    except (TimeoutError, ConnectionRefusedError, socket.gaierror) as e:
+        print("Failed when trying to send to Receiver: ",e)
+        attempt+=1
+    except http.client.CannotSendRequest as e:
+        if e == "Request-Sent":
+            print("Terminating because our client sent the request already")
 
     return result
 
@@ -172,27 +172,25 @@ def send_to_indexer(beat):
     }
     attempt = 0
     result = False
-    while MAX_RETRIES > attempt:
-        try:
-            conn.request(
-                "POST", "/sock-em-alerts/_doc",
-                body=json.dumps(beat), headers=headers
-            )
-            # Handle response
-            response = conn.getresponse()
-            conn.close()
-            print(response.status)
-            if response.status == 201:
-                result = True
-                break
-        except (TimeoutError, ConnectionRefusedError, socket.gaierror) as e:
-            print("Failed when trying to send to OpenSearch: ",e)
-            attempt+=1
-            result = False
-        except http.client.CannotSendRequest as e:
-            if e == "Request-Sent":
-                print("Terminating because our client sent the request already")
-                break
+    try:
+        conn.request(
+            "POST", "/sock-em-alerts/_doc",
+            body=json.dumps(beat), headers=headers
+        )
+        # Handle response
+        response = conn.getresponse()
+        conn.close()
+        print(response.status)
+        if response.status == 201:
+            result = True
+    except (TimeoutError, ConnectionRefusedError, socket.gaierror) as e:
+        print("Failed when trying to send to OpenSearch: ",e)
+        result = False
+    except http.client.CannotSendRequest as e:
+        if e == "Request-Sent":
+            print("Terminating because our client sent the request already")
+    if "severity" in beat.keys():
+        send_to_receiver(beat)
     return result
 
 def get_outbound_ip():
@@ -551,28 +549,29 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
             if sys.platform == "linux":
                 
                 final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"
-                
-            process_running[final_pid]["state"] = conn.get("state","").upper()
-            # if sys.platform == "linux":
 
-            #     process_running[final_pid]["parent_id"] = process_id_enhancement(final_pid)["parent_pid"]
-
-            process_running[final_pid]["first_seen"] = datetime.now(timezone.utc).isoformat()
-            
-            process_running[final_pid]["last_seen"] = None
-
-
-            if final_pid in proc_cache or final_pid not in process_running.keys():
-                # prevent duplicates, should be more advanced based on the smallest PID?
-                continue
-            proc_cache.append(final_pid)
-            
-            if final_pid in prev_cache:
-                # prevent duplicates for entries.
-                continue
-            
             if final_pid != "UNREADABLE":
+    
+                process_running[final_pid]["state"] = conn.get("state","").upper()
+                # if sys.platform == "linux":
 
+                #     process_running[final_pid]["parent_id"] = process_id_enhancement(final_pid)["parent_pid"]
+
+                process_running[final_pid]["first_seen"] = datetime.now(timezone.utc).isoformat()
+                
+                process_running[final_pid]["last_seen"] = None
+
+
+                if final_pid in proc_cache or final_pid not in process_running.keys():
+                    # prevent duplicates, should be more advanced based on the smallest PID?
+                    continue
+                proc_cache.append(final_pid)
+                
+                if final_pid in prev_cache:
+                    # prevent duplicates for entries.
+                    continue
+                
+                
                 process_running[final_pid]["dst_port"] = dst[-1]
 
                 process_running[final_pid]["src_port"] = src[-1]
@@ -658,26 +657,28 @@ if __name__ == "__main__":
         [print(hb) for hb in process_heartbeat["exited"]]
         # indexer host is configured, attempting to integrate new data to indexer..
         if indexer_host:
-            with ThreadPoolExecutor(max_workers=50) as executor:
-                results = []
-                count = 0
+            # with ThreadPoolExecutor(max_workers=3) as executor:
+            #     results = []
+            #     count = 0
                 for event in process_heartbeat["matched"]:
                     stamped = stamp_process(event)
                     stamped["type"] = "SockEm Alert"
-                    results.append(executor.submit(send_to_indexer, stamped))
-                    results.append(executor.submit(send_to_receiver, stamped))
-                    count+=1
+                    threading.Thread(target=send_to_indexer,args=[stamped]).start()
+
+                    # results.append(executor.submit(send_to_receiver, stamped))
+                    
                 for event in process_heartbeat["connections"]:
                     stamped = stamp_process(event)
                     stamped["type"] = "SockEm Connection Dump"
-                    results.append(executor.submit(send_to_indexer, stamped))
+                    threading.Thread(target=send_to_indexer,args=[stamped]).start()
+                    
                 for event in process_heartbeat["exited"]:
                     stamped = stamp_process(event)
                     stamped["type"] = "SockEm Process Terminaton Notification"
-                    results.append(executor.submit(send_to_indexer, stamped))
+                    threading.Thread(target=send_to_indexer,args=[stamped]).start()
 
-                for result in results:
-                    result.result()
+                # for result in results:
+                #     result.result()
 
         if not DAEMONIZE:
             
