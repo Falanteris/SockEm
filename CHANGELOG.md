@@ -6,8 +6,6 @@
     - Configuration for the integration is located in the `shuffler` folder.
         - Users need to download the `shuffler` folder to start sending SockEm data to Shuffler.
 - Quality of Life (QOL) environment variables have been added to enhance integration retries:
-    - `GLOBAL_TIMEOUT`: Default is 5 seconds.
-    - `MAX_RETRIES`: Default is 3 retries.
     - `SHUFFLE_URL`: WebHook URL
     - `NOTIFY_LEVEL`: Alerts with this vulnerability or higher will be sent to shuffler.
     - These parameters can be configured via Environment Variables.
