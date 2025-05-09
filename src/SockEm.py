@@ -136,6 +136,10 @@ def send_to_receiver(beat):
         except (TimeoutError, ConnectionRefusedError, socket.gaierror) as e:
             print("Failed when trying to send to Receiver: ",e)
             attempt+=1
+        except http.client.CannotSendRequest as e:
+            if e == "Request-Sent":
+                print("Terminating because our client sent the request already")
+                break
 
     return result
 
@@ -177,7 +181,7 @@ def send_to_indexer(beat):
             # Handle response
             response = conn.getresponse()
             conn.close()
-            
+            print(response.status)
             if response.status == 201:
                 result = True
                 break
@@ -185,7 +189,10 @@ def send_to_indexer(beat):
             print("Failed when trying to send to OpenSearch: ",e)
             attempt+=1
             result = False
-
+        except http.client.CannotSendRequest as e:
+            if e == "Request-Sent":
+                print("Terminating because our client sent the request already")
+                break
     return result
 
 def get_outbound_ip():
