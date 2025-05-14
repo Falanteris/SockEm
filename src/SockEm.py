@@ -599,8 +599,18 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
             old_process_info["processes"][items]["last_seen"] = datetime.now(timezone.utc).isoformat()
 
             process_info["exited"].append(old_process_info["processes"][items])
+            
             beat = old_process_info["processes"][items]
-            printout = f"ProcessName: {beat["PROCESSNAME"]} at {beat["last_seen"]} with a PID of {beat["ID"]}. Memory: {beat["Memory_Usage"]} kb"
+            
+            process_name = beat.get("PROCESSNAME")
+            
+            last_seen = beat.get("last_seen")
+            
+            PID = beat.get("ID")
+            
+            memory = beat.get("Memory_Usage")
+
+            printout = f"ProcessName: {process_name} at {last_seen} with a PID of {PID}. Memory: {memory} kb"
             print(printout)
         else:
             print("")
@@ -618,7 +628,19 @@ def print_process_info(beat):
     # this is usually utilized for standalone daemon runs, or script runs
     if "severity" not in beat.keys():
         
-        printout = f"[INFO] {beat["first_seen"]} A socket is {beat["state"]} on PID {beat["ID"]}: Source: {beat["src_ip"]} Dest: {beat["dst_ip"]} Memory: {beat["Memory_Usage"]} kb"
+        first_seen = beat.get("first_seen")
+        
+        state = beat.get("state")
+        
+        PID = beat.get("ID")
+        
+        src_ip = beat.get("src_ip")
+        
+        dst_ip = beat.get("dst_ip")
+
+        memory_usage = beat.get("Memory_Usage")
+        
+        printout = f"[INFO] {first_seen} A socket is {state} on PID {PID}: Source: {src_ip} Dest: {dst_ip} Memory: {memory_usage} kb"
         print(printout)
 
 if __name__ == "__main__":
