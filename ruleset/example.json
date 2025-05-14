@@ -52,7 +52,7 @@
     {
         "rule_id":100004,
         "match_state":{
-            "memory_kb":">5000000"
+            "memory_kb":">100000"
 
         },
         "severity":"HIGH",

@@ -233,7 +233,12 @@ def match_process_pair(rule,process):
             if not check_detected(process["ID"]):
                 print("[{}]".format(rule["severity"]),end=' ')
                 print(rule["description"].format(process),end=' ')
-                print(rule["rule_id"])
+                ps_name = process.get("PROCESSNAME")
+                dst_ip = process.get("dst_ip")
+                src_ip = process.get("src_ip")
+                PID = process.get("ID")
+                print(f"{PID}: {ps_name} - {src_ip} -> {dst_ip}")
+
 
                 process["rule_description"] = rule["description"]
                 process["severity"] = rule["severity"]
@@ -255,7 +260,11 @@ def match_blacklist_process(rule,process):
                 
                 print("[{}]".format(rule["severity"]),end=' ')
                 print(rule["description"].format(process),end=' ')
-                print(rule["rule_id"])
+                ps_name = process.get("PROCESSNAME")
+                dst_ip = process.get("dst_ip")
+                src_ip = process.get("src_ip")
+                PID = process.get("ID")
+                print(f"{PID}: {ps_name} - {src_ip} -> {dst_ip}")
 
                 process["rule_description"] = rule["description"]
                 process["severity"] = rule["severity"]
@@ -282,8 +291,11 @@ def match_state(rule,process):
         if not check_detected(process["ID"]):
             print("[{}]".format(rule["severity"]),end=' ')
             print(rule["description"].format(process),end=' ')
-            print(rule["rule_id"])
-            
+            ps_name = process.get("PROCESSNAME")
+            dst_ip = process.get("dst_ip")
+            src_ip = process.get("src_ip")
+            PID = process.get("ID")
+            print(f"{PID}: {ps_name} - {src_ip} -> {dst_ip}")
             process["rule_description"] = rule["description"]
             process["severity"] = rule["severity"]
             process["rule_id"] = rule["rule_id"]
@@ -304,7 +316,11 @@ def match_blacklist_port(rule,process):
             if not check_detected(process["ID"]):
                 print("[{}]".format(rule["severity"]),end=' ')
                 print(rule["description"].format(process),end=' ')
-                print(rule["rule_id"])
+                ps_name = process.get("PROCESSNAME")
+                dst_ip = process.get("dst_ip")
+                src_ip = process.get("src_ip")
+                PID = process.get("ID")
+                print(f"{PID}: {ps_name} - {src_ip} -> {dst_ip}")
 
                 process["rule_description"] = rule["description"]
                 process["severity"] = rule["severity"]
