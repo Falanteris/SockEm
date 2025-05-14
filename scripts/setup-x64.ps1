@@ -3,7 +3,8 @@ $indexerUsername = Read-Host "Enter INDEXER_USERNAME"
 $indexerPassword = Read-Host "Enter INDEXER_PASSWORD (will be stored as plain text)"
 $indexerHost     = Read-Host "Enter INDEXER_HOST (e.g., http://localhost)"
 $indexerPort     = Read-Host "Enter INDEXER_PORT (e.g., 9200)"
-
+$shufflerWebhookURL    = Read-Host "Enter SHUFFLER_WEBHOOK_URL (e.g., http://localhost)"
+$shufflerNotifySeverity    = Read-Host "Enter NOTIFY_LEVEL (e.g., MEDIUM)"
 # Set paths
 $installPath = $PWD.path
 $sockemExe   = "$installPath\SockEm-windows.exe"
@@ -33,6 +34,8 @@ if ($existing) {
     "INDEXER_PASSWORD=$indexerPassword" `
     "INDEXER_HOST=$indexerHost" `
     "INDEXER_PORT=$indexerPort" `
+    "SHUFFLER_WEBHOOK_URL=$shufflerWebhookURL" `
+    "NOTIFY_LEVEL=$shufflerNotifySeverity" `
     "DAEMONIZE=1"
 
 # Start the service

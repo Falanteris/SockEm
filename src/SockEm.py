@@ -592,14 +592,19 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
     missing = list(set(prev_cache).difference(set(proc_cache)))
 
     for items in missing:
-        print(f"[...] INFO: Process {items} has exited..")
+        print(f"[INFO] Process {items} has exited..", end=' ')
 
         if items in old_process_info["processes"].keys():
             
             old_process_info["processes"][items]["last_seen"] = datetime.now(timezone.utc).isoformat()
 
             process_info["exited"].append(old_process_info["processes"][items])
-
+            beat = old_process_info["processes"][items]
+            printout = f"ProcessName: {beat["PROCESSNAME"]} at {beat["last_seen"]} with a PID of {beat["ID"]}. Memory: {beat["Memory_Usage"]} kb"
+            print(printout)
+        else:
+            print("")
+            
     return proc_cache,process_info
 def stamp_process(process):
     """Stamp process with information."""
@@ -609,12 +614,17 @@ def stamp_process(process):
     "outbound_ip": get_outbound_ip(),
     "platform": sys.platform
     }
-    
+def print_process_info(beat):
+    # this is usually utilized for standalone daemon runs, or script runs
+    if "severity" not in beat.keys():
+        
+        printout = f"[INFO] {beat["first_seen"]} A socket is {beat["state"]} on PID {beat["ID"]}: Source: {beat["src_ip"]} Dest: {beat["dst_ip"]} Memory: {beat["Memory_Usage"]} kb"
+        print(printout)
+
 if __name__ == "__main__":
     
     load_ruleset()
     load_receivers()
-    print(config_data)
 
 
     print("""
@@ -654,7 +664,6 @@ if __name__ == "__main__":
         
         #with open("ps_heartbeat.json","w") as ps_heartbeat:
         #    json.dump(heartbeat_data,ps_heartbeat)
-        [print(hb) for hb in process_heartbeat["exited"]]
         # indexer host is configured, attempting to integrate new data to indexer..
         if indexer_host:
             # with ThreadPoolExecutor(max_workers=3) as executor:
@@ -680,6 +689,8 @@ if __name__ == "__main__":
                 # for result in results:
                 #     result.result()
 
+        [print_process_info(hb) for hb in process_heartbeat["connections"]]
+        
         if not DAEMONIZE:
             
             break
