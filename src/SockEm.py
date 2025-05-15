@@ -536,9 +536,9 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
     }
 
     
-    connections = parse_netstat()
-    
     process_running = parse_ps_data()
+    
+    connections = parse_netstat()
     
     process_info["processes"] = process_running
 
