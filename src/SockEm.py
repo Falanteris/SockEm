@@ -566,7 +566,7 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
                 
                 final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"
 
-            if final_pid != "UNREADABLE":
+            if final_pid != "UNREADABLE" or final_pid in process_running.keys():
     
                 process_running[final_pid]["state"] = conn.get("state","").upper()
                 # if sys.platform == "linux":
@@ -656,7 +656,13 @@ def print_process_info(beat):
 
         memory_usage = beat.get("Memory_Usage")
         
-        printout = f"[INFO] {first_seen} A socket is {state} on PID {PID}: Source: {src_ip} Dest: {dst_ip} Memory: {memory_usage} kb"
+        proc_name = beat.get('PROCESSNAME')
+
+        src_port = beat.get("src_port")
+
+        dst_port = beat.get("dst_port")
+
+        printout = f"[INFO] {first_seen} A socket is {state} on PID {PID}: Source: {src_ip}:{src_port} Dest: {dst_ip}:{dst_port} Memory: {memory_usage} kb ProcessName: {proc_name}"
         print(printout)
 
 if __name__ == "__main__":
