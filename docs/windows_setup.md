@@ -43,6 +43,15 @@ $indexerPort = <your_indexer_port>
   "INDEXER_PORT=$indexerPort" `
   "DAEMONIZE=1"
 ```
+**IMPORTANT**: Running within nssm requires you to check the `Allow service to interact with desktop` to see full information of the process
+
+Edit this with
+
+    nssm_64.exe edit SockEmService
+
+![alt text](image.png)
+
+Check the box, and you're set.
 
 ### Start the service
 
@@ -61,12 +70,3 @@ This can also be helpful if you don't have an **OpenSearch** or **ElasticSearch*
  & nssm_64.exe set SockEmService AppStdout "$PWD\sockem-stdout.logs"
 ```
 
-**IMPORTANT**: Running within nssm requires you to check the `Allow service to interact with desktop` to see full information of the process
-
-Edit this with
-
-    nssm_64.exe edit SockEmService
-
-![alt text](image.png)
-
-Check the box, and you're set.
