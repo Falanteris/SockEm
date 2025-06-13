@@ -570,8 +570,10 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
                 final_pid = conn["pid"].split('/')[0] if "/" in conn["pid"] else "UNREADABLE"
 
             if final_pid != "UNREADABLE" or final_pid in process_running.keys():
-    
-                process_running[final_pid]["state"] = conn.get("state","").upper()
+                try:
+                    process_running[final_pid]["state"] = conn.get("state","").upper()
+                except KeyError:
+                    continue  # Skip if the PID is not in process_running
                 # if sys.platform == "linux":
 
                 #     process_running[final_pid]["parent_id"] = process_id_enhancement(final_pid)["parent_pid"]
