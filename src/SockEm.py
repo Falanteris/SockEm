@@ -644,7 +644,7 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
             
             if all([ rule_id in all_rule_ids for rule_id in rule["match_lateral"]]):
                     print("[{}]".format(rule["severity"]),end=' ')
-                    print("LATERAL DETECTION - ",end=' ')
+                    print("LATERAL DETECTION => ",end=' ')
                     print(rule["description"].format(rule),end=' ')
                     ps_name = "N/A"
                     dst_ip = "N/A"
