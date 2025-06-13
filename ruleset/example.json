@@ -57,6 +57,17 @@
         },
         "severity":"HIGH",
         "description":"High memory consumption from process"
+    },
+    {
+        "rule_id": 1800005,
+        
+        "match_lateral":[
+                100003,
+                100007
+            
+        ],
+        "description":"A python script is running and potentially being used for reverse shell",
+        "severity":"HIGH"
     }
-    
+
 ]

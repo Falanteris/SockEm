@@ -230,7 +230,7 @@ def match_process_pair(rule,process):
         port_valid = whitelist["port"] == int(process["dst_port"] if process["dst_port"] not in ('*','') else 0)
 
         if not valids and port_valid:
-            if not check_detected(process["ID"]):
+           # if not check_detected(process["ID"]):
                 print("[{}]".format(rule["severity"]),end=' ')
                 print(rule["description"].format(process),end=' ')
                 ps_name = process.get("PROCESSNAME")
@@ -256,7 +256,7 @@ def match_blacklist_process(rule,process):
 
         real_name = proc_parts[-1]
         if real_name.startswith(blacklist):
-            if not check_detected(process["ID"]):
+           # if not check_detected(process["ID"]):
                 
                 print("[{}]".format(rule["severity"]),end=' ')
                 print(rule["description"].format(process),end=' ')
@@ -288,7 +288,7 @@ def match_state(rule,process):
     verdict = False
 
     if kb_process > mem_threshold:
-        if not check_detected(process["ID"]):
+        #if not check_detected(process["ID"]):
             print("[{}]".format(rule["severity"]),end=' ')
             print(rule["description"].format(process),end=' ')
             ps_name = process.get("PROCESSNAME")
@@ -313,20 +313,20 @@ def match_blacklist_port(rule,process):
     src_port = process["src_port"] or None
     if src_port:
         if int(src_port) in port_list:
-            if not check_detected(process["ID"]):
-                print("[{}]".format(rule["severity"]),end=' ')
-                print(rule["description"].format(process),end=' ')
-                ps_name = process.get("PROCESSNAME")
-                dst_ip = process.get("dst_ip")
-                src_ip = process.get("src_ip")
-                PID = process.get("ID")
-                print(f"{PID}: {ps_name} - {src_ip} -> {dst_ip}")
+            #if not check_detected(process["ID"]):
+            print("[{}]".format(rule["severity"]),end=' ')
+            print(rule["description"].format(process),end=' ')
+            ps_name = process.get("PROCESSNAME")
+            dst_ip = process.get("dst_ip")
+            src_ip = process.get("src_ip")
+            PID = process.get("ID")
+            print(f"{PID}: {ps_name} - {src_ip} -> {dst_ip}")
 
-                process["rule_description"] = rule["description"]
-                process["severity"] = rule["severity"]
-                process["rule_id"] = rule["rule_id"]
+            process["rule_description"] = rule["description"]
+            process["severity"] = rule["severity"]
+            process["rule_id"] = rule["rule_id"]
 
-                return rule["rule_id"],rule["description"].format(process),rule["severity"],process
+            return rule["rule_id"],rule["description"].format(process),rule["severity"],process
 def load_receivers():
     global config_data
 
@@ -354,35 +354,36 @@ def check_process_with_ruleset(proc_data):
     # keys = ("rule_id","description","severity","process_data")
     
     matches = []
-
+    temp_rule_match = []
     for rules in ruleset:
         result_match = None
+
         if "match_state" in rules.keys():
             result_match = match_state(rules,proc_data)
             if result_match:
                 matches.append(result_match)
-
-            
+                temp_rule_match.append(rules["rule_id"])
         if "match_blacklist_process" in rules.keys():
             result_match = match_blacklist_process(rules,proc_data)
             if result_match:
-                        matches.append(result_match)                        
-            
-            
+                matches.append(result_match)
+                temp_rule_match.append(rules["rule_id"])
         if "match_blacklist_port" in rules.keys():
             result_match = match_blacklist_port(rules,proc_data)
             if result_match:
                 matches.append(result_match)
-    
-            
+                temp_rule_match.append(rules["rule_id"])
 
         if "match_process_pair" in rules.keys():
             result_match = match_process_pair(rules,proc_data)  
         
             if result_match:
                 matches.append(result_match)
-
-    return matches
+                temp_rule_match.append(rules["rule_id"])
+            # lateral ruleset time
+        
+    
+    return matches,temp_rule_match
 
 def parse_ps_data():
     if sys.platform == "win32":
@@ -546,6 +547,8 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
     
     proc_cache = []
 
+    laterals = []
+
     check_v4v6 = lambda socket_vercheck: socket_vercheck[0] if len(socket_vercheck) == 2 else ":".join(socket_vercheck[:-1])
 
     for conn in connections:
@@ -596,7 +599,9 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
 
                 process_running[final_pid]["src_ip"] = src_ip
                 
-                matches = check_process_with_ruleset(process_running[final_pid])
+                matches,matched_ids = check_process_with_ruleset(process_running[final_pid])
+                
+                laterals += matched_ids
 
                 if len(matches) > 0:
                     process_info["matched"] += matches
@@ -630,7 +635,28 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
             print(printout)
         else:
             print("")
+    
+    for rule in ruleset:
+        result_match = None
+        if "match_lateral" in rule.keys():
             
+            all_rule_ids = laterals
+            
+            if all([ rule_id in all_rule_ids for rule_id in rule["match_lateral"]]):
+                    print("[{}]".format(rule["severity"]),end=' ')
+                    print("LATERAL DETECTION - ",end=' ')
+                    print(rule["description"].format(rule),end=' ')
+                    ps_name = "N/A"
+                    dst_ip = "N/A"
+                    src_ip = "N/A"
+                    PID = "N/A"
+
+                    rule["rule_description"] = rule["description"]
+                    rule["severity"] = rule["severity"]
+                    rule["rule_id"] = rule["rule_id"]
+                    print(f"{rule["match_lateral"]}")
+                    process_info["matched"].append(rule)
+
     return proc_cache,process_info
 def stamp_process(process):
     """Stamp process with information."""
