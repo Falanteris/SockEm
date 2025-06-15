@@ -326,7 +326,7 @@ def match_blacklist_port(rule,process):
             process["severity"] = rule["severity"]
             process["rule_id"] = rule["rule_id"]
 
-            return rule["rule_id"],rule["description"].format(process),rule["severity"],process
+            return process
 def load_receivers():
     global config_data
 
@@ -604,9 +604,9 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
                 matches,matched_ids = check_process_with_ruleset(process_running[final_pid])
                 
                 laterals += matched_ids
-
+                
                 if len(matches) > 0:
-                    process_info["matched"] += matches
+                    process_info["matched"].extend(matches)
                 
                 process_info["connections"].append(process_running[final_pid])
 
@@ -658,9 +658,10 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
                     rule["rule_id"] = rule["rule_id"]
                     print(f"{rule["match_lateral"]}")
                     del rule["match_lateral"]
-                    print(rule)
+                    
                     process_info["matched"].append(rule)
-
+    
+    print([info for info in process_info["matched"]])
     return proc_cache,process_info
 def stamp_process(process):
     """Stamp process with information."""
