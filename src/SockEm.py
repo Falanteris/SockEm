@@ -30,7 +30,7 @@ import json
 import base64
 import ssl
 from urllib.parse import quote_plus
-
+import socket
 
 DAEMONIZE = True if os.getenv("DAEMONIZE") == "1" else False
 # OpenSearch credentials
@@ -39,6 +39,8 @@ username = os.getenv("INDEXER_USERNAME", "admin")
 password = os.getenv("INDEXER_PASSWORD", "password")
 
 indexer_host = os.getenv("INDEXER_HOST")
+
+real_indexer_host = socket.gethostbyname(indexer_host) if indexer_host else None
 
 indexer_port = os.getenv("INDEXER_PORT", 9200)
 
@@ -552,6 +554,7 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
     check_v4v6 = lambda socket_vercheck: socket_vercheck[0] if len(socket_vercheck) == 2 else ":".join(socket_vercheck[:-1])
 
     for conn in connections:
+
         src = conn["src"].split(":")
         
         dst = conn["dst"].split(":")
@@ -559,7 +562,6 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
         src_ip = check_v4v6(src) # detect if the IP isn't hexadecimal, if it is, join
     
         dst_ip = check_v4v6(dst) # detect if the IP isn't hexadecimal, if it is, join
-
         
         if conn.get("state", "").upper().startswith("LISTEN") or conn.get("state", "").upper() == "ESTABLISHED":
             
@@ -582,6 +584,9 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
                 
                 process_running[final_pid]["last_seen"] = None
 
+                if dst[-1] == indexer_port and dst_ip == indexer_host:
+                    # skip if the destination is the indexer host
+                    continue
 
                 if final_pid in proc_cache or final_pid not in process_running.keys():
                     # prevent duplicates, should be more advanced based on the smallest PID?
@@ -591,8 +596,6 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
                 if final_pid in prev_cache:
                     # prevent duplicates for entries.
                     continue
-                
-                
                 process_running[final_pid]["dst_port"] = dst[-1]
 
                 process_running[final_pid]["src_port"] = src[-1]
@@ -731,7 +734,11 @@ if __name__ == "__main__":
         "matched":[],
         "exited": []
     }
-    
+    # if indexer_host:
+    if indexer_host:
+        print(f"[+] Indexer Host: {indexer_host}:{indexer_port}")
+    else:
+        print("[!] Indexer host is not configured, skipping indexing..")
     while True:
         proc_cache,process_heartbeat = run_scan(
             timestamp,hostname,proc_cache,process_heartbeat
