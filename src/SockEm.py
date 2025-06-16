@@ -523,6 +523,9 @@ def parse_netstat():
             # if src_ip == dst_ip:
             #     continue
             # src parsing
+            if conn_info["dst"] == f"{real_indexer_host}:{indexer_port}":
+                continue
+            
             results.append(conn_info)
 
     return results
