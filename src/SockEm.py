@@ -488,19 +488,23 @@ def parse_netstat():
                 continue  # Skip malformed lines
 
             conn_info = dict(zip(keys, columns))
-            conn_data = conn_info["conn_details"].split(" ")
-            conn_info["state"] = conn_data[1] if len(conn_data) > 1 else "UNKNOWN"
-            ip_data = tuple([parts.split(":")[0] for parts in conn_data[0].split("->")])
-            src_ip, dst_ip = ip_data if len(ip_data) == 2 else tuple(list(ip_data)*2)
-            # if src_ip == dst_ip:
-            #     continue
 
+            conn_data = conn_info["conn_details"].split(" ")
+
+            conn_info["state"] = conn_data[1] if len(conn_data) > 1 else "UNKNOWN"
+
+            ip_data = tuple([parts.split(":")[0] for parts in conn_data[0].split("->")])
+
+            src_ip, dst_ip = ip_data if len(ip_data) == 2 else tuple(list(ip_data)*2)
+
+            if dst_ip == f"{real_indexer_host}:{indexer_port}":
+                continue
+            
             conn_info["src"] = src_ip
 
             conn_info["dst"] = dst_ip
 
             results.append(conn_info)
-
 
     else:
         for line in lines:
@@ -584,9 +588,6 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
                 
                 process_running[final_pid]["last_seen"] = None
 
-                if dst[-1] == indexer_port and dst_ip == indexer_host:
-                    # skip if the destination is the indexer host
-                    continue
 
                 if final_pid in proc_cache or final_pid not in process_running.keys():
                     # prevent duplicates, should be more advanced based on the smallest PID?
