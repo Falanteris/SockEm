@@ -660,10 +660,10 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
                     src_ip = "N/A"
                     PID = "N/A"
 
-                    rule["rule_description"] = f"{rule["description"]} Ref: {str(rule["match_lateral"])}"
+                    rule["rule_description"] = f"{rule['description']} Ref: {str(rule['match_lateral'])}"
                     rule["severity"] = rule["severity"]
                     rule["rule_id"] = rule["rule_id"]
-                    print(f"{rule["match_lateral"]}")
+                    print(f"{rule['match_lateral']}")
                     del rule["match_lateral"]
                     
                     process_info["matched"].append(rule)
