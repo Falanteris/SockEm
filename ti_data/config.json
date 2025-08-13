@@ -1,0 +1,19 @@
+
+
+[
+    {
+        "source":"https://blocklist.greensnow.co/greensnow.txt",
+        "type":"freetext",
+        "description":"GreenSnow Blocklist"
+    },
+    {
+        "source":"https://feodotracker.abuse.ch/downloads/ipblocklist.csv",
+        "type":"csv",
+        "description":"Feodo Tracker Blocklist"
+    },
+    {
+        "source":"https://malsilo.gitlab.io/feeds/dumps/ip_list.txt",
+        "type":"csv",
+        "description":"Malsilo Blocklist"
+    }
+]

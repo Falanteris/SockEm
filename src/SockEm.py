@@ -31,7 +31,7 @@ import base64
 import ssl
 from urllib.parse import quote_plus
 import socket
-
+from parse_ti import TIManager
 DAEMONIZE = True if os.getenv("DAEMONIZE") == "1" else False
 # OpenSearch credentials
 username = os.getenv("INDEXER_USERNAME", "admin")
@@ -248,6 +248,23 @@ def match_process_pair(rule,process):
                 
                 return process
 
+def match_cti_list(process):    
+
+    proc_parts = process["PROCESSNAME"].split("\\") if sys.platform == "windows" else process["PROCESSNAME"].split("/")
+    matched = ti_manager.match_ip(process)
+    if matched:
+        # if not check_detected(process["ID"]):
+            print("[{}]".format("CRITICAL"),end=' ')
+            print(rule["description"].format(process),end=' ')
+            ps_name = process.get("PROCESSNAME")
+            dst_ip = process.get("dst_ip")
+            src_ip = process.get("src_ip")
+            PID = process.get("ID")
+            print(f"{PID}: {ps_name} - {src_ip} -> {dst_ip}")
+            process["rule_description"] = "IP matched threat intel list from {}".format(matched.get("source"))
+            process["severity"] = "CRITICAL"
+            process["rule_id"] = "CTI_MATCH"        
+            return process
 def match_blacklist_process(rule,process):    
     
     rule_id = rule["rule_id"]
@@ -377,11 +394,15 @@ def check_process_with_ruleset(proc_data):
                 temp_rule_match.append(rules["rule_id"])
 
         if "match_process_pair" in rules.keys():
-            result_match = match_process_pair(rules,proc_data)  
-        
+            result_match = match_process_pair(rules,proc_data)   
             if result_match:
                 matches.append(result_match)
                 temp_rule_match.append(rules["rule_id"])
+    match_cti = match_cti_list(proc_data)
+    if match_cti:
+        matches.append(match_cti)
+        temp_rule_match.append("CTI_MATCH")
+            
             # lateral ruleset time
         
     
@@ -429,27 +450,6 @@ def get_hostname():
     """Retrieve the system hostname."""
     return socket.gethostname()
 
-def query_threat_intel(source):
-    """Fetches high-confidence Cobalt Strike C2 IPs and returns them as a set."""
-    source_data = urlparse(source)
-    proto = source_data.scheme
-    fqdn = source_data.netloc
-    path = source_data.path
-    try:
-        if proto == "https":
-            client = http.client.HTTPSConnection
-        else:
-            client = http.client.HTTPConnection
-        conn = client(fqdn, timeout=5)
-        conn.request("GET", path)
-        r1 = conn.getresponse()
-        if r1.status != 200:
-            print(f"[ERROR] Failed to fetch threat intel (HTTP {r1.status})", file=sys.stderr)
-            return set()
-        return r1.read().decode().strip().split("\n")
-    except Exception as e:
-        print(f"[ERROR] Failed to fetch threat intel: {e}", file=sys.stderr)
-        return set()
 def load_threat_data(file_path):
     """Load threat intel from a local CSV file."""
     try:
@@ -743,45 +743,59 @@ if __name__ == "__main__":
         print(f"[+] Indexer Host: {indexer_host}:{indexer_port}")
     else:
         print("[!] Indexer host is not configured, skipping indexing..")
+    if SHUFFLE_URL:
+        print(f"[+] Shuffle URL: {SHUFFLE_URL}")
+    else:
+        print("[!] Shuffle URL is not configured, skipping SOAR integration..")
+    print("[+] Loading ti database..")
+    with open("ti_data/config.json","r") as ti_config:
+        ti_config_data = json.load(ti_config)
+        ti_manager = TIManager(ti_config_data)
+        ti_manager.parse_threat_intel()
+        print(f"[+] Loaded {len(ti_manager.ti)} threat intel entries with {len(ti_manager.parsed_ti)} unique IPs.")
+
     while True:
-        proc_cache,process_heartbeat = run_scan(
-            timestamp,hostname,proc_cache,process_heartbeat
-        )
-        
-        #with open("ps_heartbeat.json","w") as ps_heartbeat:
-        #    json.dump(heartbeat_data,ps_heartbeat)
-        # indexer host is configured, attempting to integrate new data to indexer..
-        if indexer_host:
-            # with ThreadPoolExecutor(max_workers=3) as executor:
-            #     results = []
-            #     count = 0
-                for event in process_heartbeat["matched"]:
-                    stamped = stamp_process(event)
-                    stamped["type"] = "SockEm Alert"
-                    threading.Thread(target=send_to_indexer,args=[stamped]).start()
-
-                    # results.append(executor.submit(send_to_receiver, stamped))
-                    
-                for event in process_heartbeat["connections"]:
-                    stamped = stamp_process(event)
-                    stamped["type"] = "SockEm Connection Dump"
-                    threading.Thread(target=send_to_indexer,args=[stamped]).start()
-                    
-                for event in process_heartbeat["exited"]:
-                    stamped = stamp_process(event)
-                    stamped["type"] = "SockEm Process Terminaton Notification"
-                    threading.Thread(target=send_to_indexer,args=[stamped]).start()
-
-                # for result in results:
-                #     result.result()
-
-        [print_process_info(hb) for hb in process_heartbeat["connections"]]
-        
-        if not DAEMONIZE:
+        try:
+            proc_cache,process_heartbeat = run_scan(
+                timestamp,hostname,proc_cache,process_heartbeat
+            )
             
-            break
-        
-        time.sleep(3)
+            #with open("ps_heartbeat.json","w") as ps_heartbeat:
+            #    json.dump(heartbeat_data,ps_heartbeat)
+            # indexer host is configured, attempting to integrate new data to indexer..
+            if indexer_host:
+                # with ThreadPoolExecutor(max_workers=3) as executor:
+                #     results = []
+                #     count = 0
+                    for event in process_heartbeat["matched"]:
+                        stamped = stamp_process(event)
+                        stamped["type"] = "SockEm Alert"
+                        threading.Thread(target=send_to_indexer,args=[stamped]).start()
+                        # results.append(executor.submit(send_to_receiver, stamped))
+                        
+                    for event in process_heartbeat["connections"]:
+                        stamped = stamp_process(event)
+                        stamped["type"] = "SockEm Connection Dump"
+                        threading.Thread(target=send_to_indexer,args=[stamped]).start()
+                        
+                    for event in process_heartbeat["exited"]:
+                        stamped = stamp_process(event)
+                        stamped["type"] = "SockEm Process Terminaton Notification"
+                        threading.Thread(target=send_to_indexer,args=[stamped]).start()
+
+                    # for result in results:
+                    #     result.result()
+
+            [print_process_info(hb) for hb in process_heartbeat["connections"]]
+            
+            if not DAEMONIZE:
+                
+                break
+            
+            time.sleep(3)
+        except Exception as e:
+            print(f"[ERROR] An error occurred: {e}", file=sys.stderr)
+            continue
 
 
 
