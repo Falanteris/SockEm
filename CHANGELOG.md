@@ -1,6 +1,7 @@
 # CHANGELOG
-
-## [2025-09-05]
+## [2025-08-14]
+- Brought Back TI feature, you can specify URLs of your CTI sources with data formatted in freetext or csv
+## [2025-05-09]
 - SockEm is now able to send data to Shuffler.
     - Examples can be found in the `soar_examples` folder.
     - Configuration for the integration is located in the `shuffler` folder.
