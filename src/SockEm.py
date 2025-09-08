@@ -30,8 +30,16 @@ import json
 import base64
 import ssl
 from urllib.parse import quote_plus
-import socket
-from parse_ti import TIManager
+import argparse
+
+argp = argparse.ArgumentParser(
+    description="use interactive or not?"
+)
+
+argp.add_argument("--interactive", action="store_true")
+
+cli_args = argp.parse_args()
+
 DAEMONIZE = True if os.getenv("DAEMONIZE") == "1" else False
 # OpenSearch credentials
 username = os.getenv("INDEXER_USERNAME", "admin")
@@ -69,7 +77,8 @@ severity_chart = {
     "CRITICAL":4
 }
 
-def process_id_enhancement(pid):
+def process_enhancement(data: dict):
+    pid = data["ID"]
     
     if sys.platform == "win32":
         parent_pid = subprocess.check_output(["wmic",
@@ -79,11 +88,11 @@ def process_id_enhancement(pid):
     else:
         parent_pid = subprocess.check_output(["ps",
         "-o",
-        "ppid=",pid],universal_newlines=True).strip().split("\n")[-1].strip()
+        "ppid=",pid],universal_newlines=True).strip().split("\n")[-1].strip()    
+    data["PPID"] = parent_pid or None
+    
+    return data
 
-    return {
-        "parent_pid":parent_pid
-    }
 def send_to_receiver(beat):
     """Send data to receiver for SOAR"""
     ### skips if the alert level doesn't match
@@ -248,23 +257,6 @@ def match_process_pair(rule,process):
                 
                 return process
 
-def match_cti_list(process):    
-
-    proc_parts = process["PROCESSNAME"].split("\\") if sys.platform == "windows" else process["PROCESSNAME"].split("/")
-    matched = ti_manager.match_ip(process)
-    if matched:
-        # if not check_detected(process["ID"]):
-            print("[{}]".format("CRITICAL"),end=' ')
-            print(rule["description"].format(process),end=' ')
-            ps_name = process.get("PROCESSNAME")
-            dst_ip = process.get("dst_ip")
-            src_ip = process.get("src_ip")
-            PID = process.get("ID")
-            print(f"{PID}: {ps_name} - {src_ip} -> {dst_ip}")
-            process["rule_description"] = "IP matched threat intel list from {}".format(matched.get("source"))
-            process["severity"] = "CRITICAL"
-            process["rule_id"] = "CTI_MATCH"        
-            return process
 def match_blacklist_process(rule,process):    
     
     rule_id = rule["rule_id"]
@@ -398,11 +390,6 @@ def check_process_with_ruleset(proc_data):
             if result_match:
                 matches.append(result_match)
                 temp_rule_match.append(rules["rule_id"])
-    match_cti = match_cti_list(proc_data)
-    if match_cti:
-        matches.append(match_cti)
-        temp_rule_match.append("CTI_MATCH")
-            
             # lateral ruleset time
         
     
@@ -418,7 +405,7 @@ def parse_ps_data():
         "-Command","ps | Select-Object Handles, NPM, PM, WS, @{Name='CPU'; Expression={if ($_.CPU -ne $null) {$_.CPU} else {0.0}}},Id,SI,ProcessName | Format-Table -AutoSize"
 
         ]
-
+        
         keys = ["Handles", "NPM(K)", "PM(K)", "Memory_Usage", "CPU(s)","ID", "USER","PROCESSNAME"]
 
     else:  # Linux/macOS
@@ -428,7 +415,6 @@ def parse_ps_data():
 
     try:
         data = subprocess.check_output(cmd).decode().strip().split("\n")[2:]
-        
     except subprocess.CalledProcessError as se:
         print(f"[ERROR] Failed to execute netstat: {e}", file=sys.stderr)
         return []
@@ -444,6 +430,7 @@ def parse_ps_data():
             result["Memory_Usage"] = int(float(result["Memory_Usage"] ))
 
         process_kv[result["ID"]] = result
+    
     return process_kv
     
 def get_hostname():
@@ -701,7 +688,89 @@ def print_process_info(beat):
         dst_port = beat.get("dst_port")
 
         printout = f"[INFO] {first_seen} A socket is {state} on PID {PID}: Source: {src_ip}:{src_port} Dest: {dst_ip}:{dst_port} Memory: {memory_usage} kb ProcessName: {proc_name}"
-        print(printout)
+        
+def kill_windows_task(pid):
+    try:
+        subprocess.check_output(["taskkill", "/F", "/PID", str(pid)])
+    except Exception as e:
+        print(e)
+
+def kill_unix_task(pid):
+    try:
+        subprocess.check_output(["kill", "-9", str(pid)])
+    except Exception as e:
+        print(e)
+def fetch_specific_process(pid):
+    spec_pid = ["wmic", "process", "where", f"processId={pid}", "get", "name"]
+    try:
+        get_name = subprocess.check_output(spec_pid, universal_newlines=True).strip().split("\n")[-1]
+        print(get_name.split("\n"))
+    except Exception as e:
+        print(e)
+    print("NAME: ",get_name)
+    return get_name
+
+def pql_query(query: str, heartbeat_data: list, ps_list: list):
+    # Query Format
+    # <DIRECTIVE (Kill/Report)> <PARENT_PROC_NAME_PATTERN> <PARENT_PROC_CHILD_PATTERN> <DEST_HOST> <PORT>
+    item = query.split(" ")
+    try:
+        directives = ["command","parent","child","dst_host","dst_port"]
+        params = dict(zip(directives,item))
+    except Exception as e:
+        pass
+    if params["command"] not in ("Kill","Report"):
+        print("Command has to be 'Kill' or 'Report'")
+        return
+    query_exec = lambda beat_arg: all((
+        beat_arg["PROCESSNAME"] == params["child"] if params["child"] !='*' else True,
+        any((
+            beat_arg["dst_ip"] == params["dst_host"] if params["dst_host"] !='*' else True,
+            beat_arg["dst_ip"] not in ("127.0.0.1","[::]","[::1]","0.0.0.0") if params["dst_host"] =='nonlocal' else False
+        )),
+        any((
+            beat_arg["dst_port"] == params["dst_port"] if params["dst_port"] !='*' else True,
+            beat_arg["dst_port"] not in ("80","443","22","21","25","53","80","110","143","443","3389") if params["dst_port"] == 'nsp' else False
+        ))
+    ))
+    query_proc_name = lambda heartbeat: [beat_match for beat_match in heartbeat_data if query_exec(beat_match)]
+    matching_names = query_proc_name(heartbeat_data)
+    match_final = []
+    for matches in matching_names:
+        matches = process_enhancement(matches)
+        
+        # if params["command"] == "Kill":
+        #     print(f"!!! KILL", end=' ')
+        #     # prioritize parent PID, kill the process from it's root
+        #     #kill_windows_task(matches["PPID"] or matches["PID"]) if sys.platform == "win32" else kill_unix_task(matches["PPID"] or matches["ID"])
+        # else:
+        #     print(f"!!! REPORT", end=' ')
+
+        # print(f"{matches}")
+        
+        matches["command"] = params["command"]
+
+        match_final.append(matches)
+
+    return match_final
+
+def tabulate_local(data):
+    headers = list(data[0].keys())
+    # Determine maximum width for each column
+    col_widths = {header: len(header) for header in headers}
+    for row_dict in data:
+        for header in headers:
+            col_widths[header] = max(col_widths[header], len(str(row_dict.get(header, ''))))
+
+    # Print header row
+    header_line = " | ".join(f"{h:<{col_widths[h]}}" for h in headers)
+    print(header_line)
+    print("-" * len(header_line))
+
+    # Print data rows
+    for row_dict in data:
+        row_line = " | ".join(f"{str(row_dict.get(h, '')):<{col_widths[h]}}" for h in headers)
+        print(row_line)
 
 if __name__ == "__main__":
     
@@ -747,55 +816,80 @@ if __name__ == "__main__":
         print(f"[+] Shuffle URL: {SHUFFLE_URL}")
     else:
         print("[!] Shuffle URL is not configured, skipping SOAR integration..")
-    print("[+] Loading ti database..")
-    with open("ti_data/config.json","r") as ti_config:
-        ti_config_data = json.load(ti_config)
-        ti_manager = TIManager(ti_config_data)
-        ti_manager.parse_threat_intel()
-        print(f"[+] Loaded {len(ti_manager.ti)} threat intel entries with {len(ti_manager.parsed_ti)} unique IPs.")
+    if cli_args.interactive:
+        proc_cache,process_heartbeat = run_scan(
+                    timestamp,hostname,proc_cache,process_heartbeat
+        )
+        print("Welcome to SockEm's Interactive mode",end='\n\n')
+        print("PQL Format [<Kill/Report> <ParentProcessName/*> <ProcessName/nonlocal/*> <port/nsp>]",end='\n\n')
+        print("nsp: Non-Standard Port --> Refer to IANA standard port for this")
+        print("nonlocal: Anything besides localhost",end='\n\n')
+        print("Please enter your PQL: ")
+        
+        while True:
+            try:        
+                pql = input("query>> ")
+                result = pql_query(
+                    pql, 
+                    process_heartbeat["connections"],
+                    process_heartbeat["processes"]
+                )
+                tabulate_local(result)
 
-    while True:
-        try:
-            proc_cache,process_heartbeat = run_scan(
-                timestamp,hostname,proc_cache,process_heartbeat
-            )
-            
-            #with open("ps_heartbeat.json","w") as ps_heartbeat:
-            #    json.dump(heartbeat_data,ps_heartbeat)
-            # indexer host is configured, attempting to integrate new data to indexer..
-            if indexer_host:
-                # with ThreadPoolExecutor(max_workers=3) as executor:
-                #     results = []
-                #     count = 0
-                    for event in process_heartbeat["matched"]:
-                        stamped = stamp_process(event)
-                        stamped["type"] = "SockEm Alert"
-                        threading.Thread(target=send_to_indexer,args=[stamped]).start()
-                        # results.append(executor.submit(send_to_receiver, stamped))
-                        
-                    for event in process_heartbeat["connections"]:
-                        stamped = stamp_process(event)
-                        stamped["type"] = "SockEm Connection Dump"
-                        threading.Thread(target=send_to_indexer,args=[stamped]).start()
-                        
-                    for event in process_heartbeat["exited"]:
-                        stamped = stamp_process(event)
-                        stamped["type"] = "SockEm Process Terminaton Notification"
-                        threading.Thread(target=send_to_indexer,args=[stamped]).start()
-
-                    # for result in results:
-                    #     result.result()
-
-            [print_process_info(hb) for hb in process_heartbeat["connections"]]
-            
-            if not DAEMONIZE:
-                
+            except KeyboardInterrupt as ke:
                 break
+            except Exception as e:
+                print(e)
             
-            time.sleep(3)
-        except Exception as e:
-            print(f"[ERROR] An error occurred: {e}", file=sys.stderr)
-            continue
+    elif not cli_args.interactive:
+        while True:
+            try:
+                proc_cache,process_heartbeat = run_scan(
+                    timestamp,hostname,proc_cache,process_heartbeat
+                )
+                
+                pql_query(
+                    "Report * * * nsp",
+                    process_heartbeat["connections"],
+                    process_heartbeat["processes"]
+                )
+                
+                #with open("ps_heartbeat.json","w") as ps_heartbeat:
+                #    json.dump(heartbeat_data,ps_heartbeat)
+                # indexer host is configured, attempting to integrate new data to indexer..
+                if indexer_host:
+                    # with ThreadPoolExecutor(max_workers=3) as executor:
+                    #     results = []
+                    #     count = 0
+                        for event in process_heartbeat["matched"]:
+                            stamped = stamp_process(event)
+                            stamped["type"] = "SockEm Alert"
+                            threading.Thread(target=send_to_indexer,args=[stamped]).start()
+                            # results.append(executor.submit(send_to_receiver, stamped))
+                            
+                        for event in process_heartbeat["connections"]:
+                            stamped = stamp_process(event)
+                            stamped["type"] = "SockEm Connection Dump"
+                            threading.Thread(target=send_to_indexer,args=[stamped]).start()
+                            
+                        for event in process_heartbeat["exited"]:
+                            stamped = stamp_process(event)
+                            stamped["type"] = "SockEm Process Terminaton Notification"
+                            threading.Thread(target=send_to_indexer,args=[stamped]).start()
+
+                        # for result in results:
+                        #     result.result()
+
+                #[print_process_info(hb) for hb in process_heartbeat["connections"]]
+                
+                if not DAEMONIZE:
+                    
+                    break
+                
+                time.sleep(3)
+            except Exception as e:
+                print(f"[ERROR] An error occurred: {e}", file=sys.stderr)
+                continue
 
 
 
