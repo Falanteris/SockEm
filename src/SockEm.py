@@ -755,22 +755,23 @@ def pql_query(query: str, heartbeat_data: list, ps_list: list):
     return match_final
 
 def tabulate_local(data):
-    headers = list(data[0].keys())
-    # Determine maximum width for each column
-    col_widths = {header: len(header) for header in headers}
-    for row_dict in data:
-        for header in headers:
-            col_widths[header] = max(col_widths[header], len(str(row_dict.get(header, ''))))
+    if data:
+        headers = list(data[0].keys())
+        # Determine maximum width for each column
+        col_widths = {header: len(header) for header in headers}
+        for row_dict in data:
+            for header in headers:
+                col_widths[header] = max(col_widths[header], len(str(row_dict.get(header, ''))))
 
-    # Print header row
-    header_line = " | ".join(f"{h:<{col_widths[h]}}" for h in headers)
-    print(header_line)
-    print("-" * len(header_line))
+        # Print header row
+        header_line = " | ".join(f"{h:<{col_widths[h]}}" for h in headers)
+        print(header_line)
+        print("-" * len(header_line))
 
-    # Print data rows
-    for row_dict in data:
-        row_line = " | ".join(f"{str(row_dict.get(h, '')):<{col_widths[h]}}" for h in headers)
-        print(row_line)
+        # Print data rows
+        for row_dict in data:
+            row_line = " | ".join(f"{str(row_dict.get(h, '')):<{col_widths[h]}}" for h in headers)
+            print(row_line)
 
 if __name__ == "__main__":
     
@@ -839,7 +840,7 @@ if __name__ == "__main__":
             except KeyboardInterrupt as ke:
                 break
             except Exception as e:
-                print(e)
+                raise Exception(e)
             
     elif not cli_args.interactive:
         while True:
