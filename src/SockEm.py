@@ -741,10 +741,10 @@ def pql_query(query: str, heartbeat_data: list, ps_list: list):
     for matches in matching_names:
         matches = process_enhancement(matches)
         
-        # if params["command"] == "Kill":
-        #     print(f"!!! KILL", end=' ')
-        #     # prioritize parent PID, kill the process from it's root
-        #     #kill_windows_task(matches["PPID"] or matches["PID"]) if sys.platform == "win32" else kill_unix_task(matches["PPID"] or matches["ID"])
+        if params["command"] == "Kill":
+            # print(f"!!! KILL", end=' ')
+            # prioritize parent PID, kill the process from it's root
+            kill_windows_task(matches["PPID"] or matches["PID"]) if sys.platform == "win32" else kill_unix_task(matches["PPID"] or matches["ID"])
         # else:
         #     print(f"!!! REPORT", end=' ')
 
