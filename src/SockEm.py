@@ -60,6 +60,8 @@ SHUFFLE_URL = os.getenv("SHUFFLE_URL")
 
 NOTIFY_LEVEL = os.getenv("NOTIFY_LEVEL")
 
+INTERACTIVE = os.getenv("INTERACTIVE")=="1" 
+
 RULESET = glob.glob("ruleset/*.json")
     
 extracted_rid = []
@@ -817,7 +819,7 @@ if __name__ == "__main__":
         print(f"[+] Shuffle URL: {SHUFFLE_URL}")
     else:
         print("[!] Shuffle URL is not configured, skipping SOAR integration..")
-    if cli_args.interactive:
+    if cli_args.interactive or INTERACTIVE:
         proc_cache,process_heartbeat = run_scan(
                     timestamp,hostname,proc_cache,process_heartbeat
         )
