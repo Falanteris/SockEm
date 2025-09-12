@@ -36,4 +36,29 @@ sudo systemctl enable sockem.service
 sudo systemctl start sockem.service
 ```
 
+### Optional: Log systemd sockem service
+
+### Create a Systemd Service File
+
+```ini
+[Unit]
+Description=SockEm Service
+After=network.target
+
+[Service]
+Environment="INDEXER_HOST=your-indexer-host"
+Environment="INDEXER_PORT=your-indexer-port"
+Environment="INDEXER_USERNAME=your-username"
+Environment="INDEXER_PASSWORD=your-password"
+Environment="DAEMONIZE=1"
+WorkingDirectory=/path/to/sockem
+ExecStart=/usr/bin/python3 src/SockEm.py
+Restart=always
+User=root
+StandardOutput=append:/var/log/sockem.log
+StandardError=append:/var/log/sockem.log
+
+[Install]
+WantedBy=multi-user.target
+```
 
