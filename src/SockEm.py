@@ -732,7 +732,7 @@ def pql_query(query: str, heartbeat_data: list, ps_list: list):
         )),
         any((
             beat_arg["dst_port"] == params["dst_port"] if params["dst_port"] !='*' else True,
-            beat_arg["dst_port"] not in ("80","443","22","21","25","53","80","110","143","443","3389") if params["dst_port"] == 'nsp' else False
+            beat_arg["dst_port"] not in ("80","443","22","21","25","53","135","110","143","443","3389") if params["dst_port"] == 'nsp' else False
         ))
     ))
     query_proc_name = lambda heartbeat: [beat_match for beat_match in heartbeat_data if query_exec(beat_match)]
@@ -850,20 +850,18 @@ if __name__ == "__main__":
                 proc_cache,process_heartbeat = run_scan(
                     timestamp,hostname,proc_cache,process_heartbeat
                 )
-                
-                pql_query(
-                    "Report * * * nsp",
-                    process_heartbeat["connections"],
-                    process_heartbeat["processes"]
-                )
-                
-                #with open("ps_heartbeat.json","w") as ps_heartbeat:
-                #    json.dump(heartbeat_data,ps_heartbeat)
-                # indexer host is configured, attempting to integrate new data to indexer..
+                with open("search.pql","r") as pql_data:
+                    for pql in pql_data.readlines():
+                        if not pql.startswith("#"):
+                            # skip comment lines
+                            
+                            result = pql_query(
+                                pql,
+                                process_heartbeat["connections"],
+                                process_heartbeat["processes"]
+                            )
+                            print(result)
                 if indexer_host:
-                    # with ThreadPoolExecutor(max_workers=3) as executor:
-                    #     results = []
-                    #     count = 0
                         for event in process_heartbeat["matched"]:
                             stamped = stamp_process(event)
                             stamped["type"] = "SockEm Alert"
@@ -880,13 +878,7 @@ if __name__ == "__main__":
                             stamped["type"] = "SockEm Process Terminaton Notification"
                             threading.Thread(target=send_to_indexer,args=[stamped]).start()
 
-                        # for result in results:
-                        #     result.result()
-
-                #[print_process_info(hb) for hb in process_heartbeat["connections"]]
-                
                 if not DAEMONIZE:
-                    
                     break
                 
                 time.sleep(3)
