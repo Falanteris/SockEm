@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 import subprocess
+import platform
 import sys
 import re
 import http.client
@@ -31,6 +32,7 @@ import base64
 import ssl
 from urllib.parse import quote_plus
 import argparse
+import socket
 
 argp = argparse.ArgumentParser(
     description="use interactive or not?"
@@ -41,6 +43,12 @@ argp.add_argument("--interactive", action="store_true")
 cli_args = argp.parse_args()
 
 DAEMONIZE = True if os.getenv("DAEMONIZE") == "1" else False
+
+BEATEM_ONBD_HOST = os.getenv("BEATEM_ONBD_HOST")
+BEATEM_ONBD_PORT = os.getenv("BEATEM_ONBD_PORT")
+# BeatEm Credentials
+BEATEM_TOKEN = os.getenv("BEATEM_TOKEN")
+
 # OpenSearch credentials
 username = os.getenv("INDEXER_USERNAME", "admin")
 
@@ -142,6 +150,7 @@ def send_to_receiver(beat):
         )
         # Handle response
         response = conn.getresponse()
+        
         conn.close()
         
         if response.status >= 200 and response.status < 300:
@@ -153,7 +162,6 @@ def send_to_receiver(beat):
     except http.client.CannotSendRequest as e:
         if e == "Request-Sent":
             print("Terminating because our client sent the request already")
-
     return result
 
 
@@ -202,10 +210,9 @@ def send_to_indexer(beat):
     except http.client.CannotSendRequest as e:
         if e == "Request-Sent":
             print("Terminating because our client sent the request already")
-    if "severity" in beat.keys():
-        send_to_receiver(beat)
+    # if "severity" in beat.keys():
+    #     send_to_receiver(beat)
     return result
-
 def get_outbound_ip():
 
     ip_addr = "127.0.0.1"
@@ -664,8 +671,8 @@ def stamp_process(process):
     return {**process, 
     "timestamp": datetime.now(timezone.utc).isoformat(), 
     "hostname": get_hostname(), 
-    "outbound_ip": get_outbound_ip(),
-    "platform": sys.platform
+    "ip": get_outbound_ip(),
+    "os":  platform.uname().system
     }
 def print_process_info(beat):
     # this is usually utilized for standalone daemon runs, or script runs
@@ -776,11 +783,8 @@ def tabulate_local(data):
             print(row_line)
 
 if __name__ == "__main__":
-    
     load_ruleset()
     load_receivers()
-
-
     print("""
        _____            _    ______ __  __ 
   / ____|          | |  |  ____|  \/  |
@@ -819,10 +823,11 @@ if __name__ == "__main__":
         print(f"[+] Shuffle URL: {SHUFFLE_URL}")
     else:
         print("[!] Shuffle URL is not configured, skipping SOAR integration..")
-    if cli_args.interactive or INTERACTIVE:
-        proc_cache,process_heartbeat = run_scan(
+    proc_cache,process_heartbeat = run_scan(
                     timestamp,hostname,proc_cache,process_heartbeat
-        )
+    )
+    if cli_args.interactive or INTERACTIVE:
+        
         print("Welcome to SockEm's Interactive mode",end='\n\n')
         print("PQL Format [<Kill/Report> <ParentProcessName/*> <ProcessName/nonlocal/*> <port/nsp>]",end='\n\n')
         print("nsp: Non-Standard Port --> Refer to IANA standard port for this")
@@ -850,34 +855,35 @@ if __name__ == "__main__":
                 proc_cache,process_heartbeat = run_scan(
                     timestamp,hostname,proc_cache,process_heartbeat
                 )
-                with open("search.pql","r") as pql_data:
-                    for pql in pql_data.readlines():
-                        if not pql.startswith("#"):
-                            # skip comment lines
-                            
-                            result = pql_query(
-                                pql,
-                                process_heartbeat["connections"],
-                                process_heartbeat["processes"]
-                            )
-                            print(result)
+                pql_result = [] # result for pql queries
+                try:
+                    with open("search.pql","r") as pql_data:
+                        for pql in pql_data.readlines():
+                            if not pql.startswith("#"):
+                                # skip comment lines
+                                
+                                pql_result = pql_query(
+                                    pql,
+                                    process_heartbeat["connections"],
+                                    process_heartbeat["processes"]
+                                )
+                        print(pql_result)
+                except FileNotFoundError as fe:
+                    print("No search.pql specified.. Skipping. Define your search.pql on non interactive mode")
                 if indexer_host:
-                        for event in process_heartbeat["matched"]:
-                            stamped = stamp_process(event)
-                            stamped["type"] = "SockEm Alert"
-                            threading.Thread(target=send_to_indexer,args=[stamped]).start()
-                            # results.append(executor.submit(send_to_receiver, stamped))
-                            
-                        for event in process_heartbeat["connections"]:
-                            stamped = stamp_process(event)
-                            stamped["type"] = "SockEm Connection Dump"
-                            threading.Thread(target=send_to_indexer,args=[stamped]).start()
-                            
-                        for event in process_heartbeat["exited"]:
-                            stamped = stamp_process(event)
-                            stamped["type"] = "SockEm Process Terminaton Notification"
-                            threading.Thread(target=send_to_indexer,args=[stamped]).start()
-
+                    for event in process_heartbeat["matched"]:
+                        stamped = stamp_process(event)
+                        stamped["type"] = "SockEm Alert"
+                        threading.Thread(target=send_to_indexer,args=[stamped]).start()
+                        # results.append(executor.submit(send_to_receiver, stamped))
+                    for event in result:
+                        stamped = stamp_process(event)
+                        stamped["type"] = "SockEm PQL results"
+                        threading.Thread(target=send_to_indexer,args=[stamped]).start()
+                    for event in process_heartbeat["exited"]:
+                        stamped = stamp_process(event)
+                        stamped["type"] = "SockEm Process Terminaton Notification"
+                        threading.Thread(target=send_to_indexer,args=[stamped]).start()                    
                 if not DAEMONIZE:
                     break
                 
