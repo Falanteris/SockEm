@@ -862,11 +862,13 @@ if __name__ == "__main__":
                             if not pql.startswith("#"):
                                 # skip comment lines
                                 
-                                pql_result = pql_query(
+                                pql_result_temp = pql_query(
                                     pql,
                                     process_heartbeat["connections"],
                                     process_heartbeat["processes"]
                                 )
+                                pql_result.extend(pql_result_temp)
+                                
                         print(pql_result)
                 except FileNotFoundError as fe:
                     print("No search.pql specified.. Skipping. Define your search.pql on non interactive mode")
@@ -883,7 +885,7 @@ if __name__ == "__main__":
                     for event in process_heartbeat["exited"]:
                         stamped = stamp_process(event)
                         stamped["type"] = "SockEm Process Terminaton Notification"
-                        threading.Thread(target=send_to_indexer,args=[stamped]).start()                    
+                        threading.Thread(target=send_to_indexer,args=[stamped]).start()
                 if not DAEMONIZE:
                     break
                 
