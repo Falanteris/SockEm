@@ -1,3 +1,2 @@
 # This is an example PQL file, you can set this as a baseline
-Report * * * nsp
 Report * * nonlocal *

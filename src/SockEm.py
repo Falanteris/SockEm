@@ -555,7 +555,7 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
     laterals = []
 
     check_v4v6 = lambda socket_vercheck: socket_vercheck[0] if len(socket_vercheck) == 2 else ":".join(socket_vercheck[:-1])
-
+    
     for conn in connections:
 
         src = conn["src"].split(":")
@@ -731,6 +731,7 @@ def pql_query(query: str, heartbeat_data: list, ps_list: list):
     if params["command"] not in ("Kill","Report"):
         print("Command has to be 'Kill' or 'Report'")
         return
+    
     query_exec = lambda beat_arg: all((
         beat_arg["PROCESSNAME"] == params["child"] if params["child"] !='*' else True,
         any((
@@ -760,7 +761,6 @@ def pql_query(query: str, heartbeat_data: list, ps_list: list):
         matches["command"] = params["command"]
 
         match_final.append(matches)
-
     return match_final
 
 def tabulate_local(data):
@@ -843,7 +843,10 @@ if __name__ == "__main__":
                     process_heartbeat["processes"]
                 )
                 tabulate_local(result)
-
+                
+                proc_cache,process_heartbeat = run_scan(
+                    timestamp,hostname,proc_cache,process_heartbeat
+                )
             except KeyboardInterrupt as ke:
                 break
             except Exception as e:
@@ -852,24 +855,22 @@ if __name__ == "__main__":
     elif not cli_args.interactive:
         while True:
             try:
-                proc_cache,process_heartbeat = run_scan(
-                    timestamp,hostname,proc_cache,process_heartbeat
-                )
                 pql_result = [] # result for pql queries
                 try:
                     with open("search.pql","r") as pql_data:
                         for pql in pql_data.readlines():
                             if not pql.startswith("#"):
                                 # skip comment lines
-                                
                                 pql_result_temp = pql_query(
                                     pql,
                                     process_heartbeat["connections"],
                                     process_heartbeat["processes"]
                                 )
+                                
                                 pql_result.extend(pql_result_temp)
                                 
-                        print(pql_result)
+                        if len(pql_result) > 0:
+                            print(pql_result)
                 except FileNotFoundError as fe:
                     print("No search.pql specified.. Skipping. Define your search.pql on non interactive mode")
                 if indexer_host:
@@ -890,6 +891,10 @@ if __name__ == "__main__":
                     break
                 
                 time.sleep(3)
+                
+                proc_cache,process_heartbeat = run_scan(
+                    timestamp,hostname,proc_cache,process_heartbeat
+                )
             except Exception as e:
                 print(f"[ERROR] An error occurred: {e}", file=sys.stderr)
                 continue
