@@ -664,7 +664,6 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
                     
                     process_info["matched"].append(rule)
     
-    print([info for info in process_info["matched"]])
     return proc_cache,process_info
 def stamp_process(process):
     """Stamp process with information."""
@@ -866,9 +865,7 @@ if __name__ == "__main__":
                                     process_heartbeat["connections"],
                                     process_heartbeat["processes"]
                                 )
-                                
-                                pql_result.extend(pql_result_temp)
-                                
+                                pql_result.extend(pql_result_temp)                                
                         if len(pql_result) > 0:
                             print(pql_result)
                 except FileNotFoundError as fe:
