@@ -44,21 +44,12 @@ cli_args = argp.parse_args()
 
 DAEMONIZE = True if os.getenv("DAEMONIZE") == "1" else False
 
-BEATEM_ONBD_HOST = os.getenv("BEATEM_ONBD_HOST")
-BEATEM_ONBD_PORT = os.getenv("BEATEM_ONBD_PORT")
-# BeatEm Credentials
-BEATEM_TOKEN = os.getenv("BEATEM_TOKEN")
+# BEATEM_ONBD_HOST = os.getenv("BEATEM_ONBD_HOST")
+# BEATEM_ONBD_PORT = os.getenv("BEATEM_ONBD_PORT")
+# # BeatEm Credentials
+# BEATEM_TOKEN = os.getenv("BEATEM_TOKEN")
 
 # OpenSearch credentials
-username = os.getenv("INDEXER_USERNAME", "admin")
-
-password = os.getenv("INDEXER_PASSWORD", "password")
-
-indexer_host = os.getenv("INDEXER_HOST")
-
-real_indexer_host = socket.gethostbyname(indexer_host) if indexer_host else None
-
-indexer_port = os.getenv("INDEXER_PORT", 9200)
 
 MAX_RETRIES = os.getenv("MAX_RETRIES") or 3
 
@@ -69,8 +60,6 @@ SHUFFLE_URL = os.getenv("SHUFFLE_URL")
 NOTIFY_LEVEL = os.getenv("NOTIFY_LEVEL")
 
 INTERACTIVE = os.getenv("INTERACTIVE")=="1" 
-
-RULESET = glob.glob("ruleset/*.json")
     
 extracted_rid = []
 
@@ -106,8 +95,6 @@ def process_enhancement(data: dict):
 def send_to_receiver(beat):
     """Send data to receiver for SOAR"""
     ### skips if the alert level doesn't match
-    if config_data["alert_level"] > severity_chart.get(beat["severity"],0):
-        return False
 
     fullpath = config_data["url"]
 
@@ -119,31 +106,17 @@ def send_to_receiver(beat):
         receiver_host, receiver_port, context=ssl._create_unverified_context(),timeout=GLOBAL_TIMEOUT
     )
 
-    # if sys.platform == "win32":
-
-    #     try:
-    #         wmi_process = f"""
-    # Get-WmiObject Win32_Process |
-    # Where-Object {{ $_.Name -like '{beat["PROCESSNAME"]}.exe' }} |
-    # Select-Object -First 1 -ExpandProperty ExecutablePath
-    # """
-    #         cmd = subprocess.check_output(["powershell",
-    #         "-Command", wmi_process],universal_newlines=True)
-    #         check_name = cmd.strip()
-    #         if len(check_name) == 0:
-    #             raise Exception("Command not found, defaulting to detected ps command")
-
-    #     except Exception as e:
-    #         check_name = beat["PROCESSNAME"]
-    #     # Check if the process name is valid
-    #     beat["PROCESSNAME"] = check_name
+    
     attempt = 0
+    
     result = False
+
     headers = {
             "Content-Type": "application/json"
     }
     # while MAX_RETRIES > attempt:
     try:
+        beat = process_enhancement(beat)
         conn.request(
             "POST", parsed.path,
             body=json.dumps(beat), headers=headers
@@ -164,55 +137,6 @@ def send_to_receiver(beat):
             print("Terminating because our client sent the request already")
     return result
 
-
-def send_to_indexer(beat):
-    """Send data to the indexer."""
-    conn = http.client.HTTPSConnection(
-        indexer_host, indexer_port, context=ssl._create_unverified_context(),timeout=GLOBAL_TIMEOUT
-    )
-    if sys.platform == "win32":
-        try:
-            wmi_process = f"""
-    Get-WmiObject Win32_Process |
-    Where-Object {{ $_.Name -like '{beat["PROCESSNAME"]}.exe' }} |
-    Select-Object -First 1 -ExpandProperty ExecutablePath
-    """
-            cmd = subprocess.check_output(["powershell",
-            "-Command", wmi_process],universal_newlines=True)
-            check_name = cmd.strip()
-            if len(check_name) == 0:
-                raise Exception("Command not found, defaulting to detected ps command")
-        except Exception as e:
-            check_name = beat["PROCESSNAME"]
-        # Check if the process name is valid
-        beat["PROCESSNAME"] = check_name
-    auth_token = base64.b64encode(f"{username}:{password}".encode()).decode()
-    headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Basic {auth_token}"
-    }
-    attempt = 0
-    result = False
-    try:
-        conn.request(
-            "POST", "/sock-em-alerts/_doc",
-            body=json.dumps(beat), headers=headers
-        )
-        # Handle response
-        response = conn.getresponse()
-        conn.close()
-        print(response.status)
-        if response.status == 201:
-            result = True
-    except (TimeoutError, ConnectionRefusedError, socket.gaierror) as e:
-        print("Failed when trying to send to OpenSearch: ",e)
-        result = False
-    except http.client.CannotSendRequest as e:
-        if e == "Request-Sent":
-            print("Terminating because our client sent the request already")
-    # if "severity" in beat.keys():
-    #     send_to_receiver(beat)
-    return result
 def get_outbound_ip():
 
     ip_addr = "127.0.0.1"
@@ -225,185 +149,14 @@ def get_outbound_ip():
         pass
 
     return ip_addr
-    
-def check_detected(pid):
-    global detected
 
-    if pid in detected:
-        return True
-    
-    detected.append(pid)
-
-def match_process_pair(rule,process):
-    global detected    
-    rule_id = rule["rule_id"]
-
-    if "dst_port" not in process.keys():
-        return
-    
-    proc_parts = process["PROCESSNAME"].split("\\") if sys.platform == "windows" else process["PROCESSNAME"].split("/")
-    real_name = proc_parts[-1]
-    for whitelist in rule["match_process_pair"]:
-
-        valids = any([real_name.startswith(valid) for valid in whitelist["valid_process"]])
-        
-        port_valid = whitelist["port"] == int(process["dst_port"] if process["dst_port"] not in ('*','') else 0)
-
-        if not valids and port_valid:
-           # if not check_detected(process["ID"]):
-                print("[{}]".format(rule["severity"]),end=' ')
-                print(rule["description"].format(process),end=' ')
-                ps_name = process.get("PROCESSNAME")
-                dst_ip = process.get("dst_ip")
-                src_ip = process.get("src_ip")
-                PID = process.get("ID")
-                print(f"{PID}: {ps_name} - {src_ip} -> {dst_ip}")
-
-
-                process["rule_description"] = rule["description"]
-                process["severity"] = rule["severity"]
-                process["rule_id"] = rule["rule_id"]
-                
-                return process
-
-def match_blacklist_process(rule,process):    
-    
-    rule_id = rule["rule_id"]
-    
-    for blacklist in rule["match_blacklist_process"]:
-        
-        proc_parts = process["PROCESSNAME"].split("\\") if sys.platform == "windows" else process["PROCESSNAME"].split("/")
-
-        real_name = proc_parts[-1]
-        if real_name.startswith(blacklist):
-           # if not check_detected(process["ID"]):
-                
-                print("[{}]".format(rule["severity"]),end=' ')
-                print(rule["description"].format(process),end=' ')
-                ps_name = process.get("PROCESSNAME")
-                dst_ip = process.get("dst_ip")
-                src_ip = process.get("src_ip")
-                PID = process.get("ID")
-                print(f"{PID}: {ps_name} - {src_ip} -> {dst_ip}")
-
-                process["rule_description"] = rule["description"]
-                process["severity"] = rule["severity"]
-                process["rule_id"] = rule["rule_id"]
-                
-                return process
-    
-def match_state(rule,process):
-    rule_id = rule["rule_id"]
-    
-    memory_threshold  = rule["match_state"]["memory_kb"]
-    
-    try:
-        mem_threshold = int(memory_threshold.split(">")[-1])
-
-    except ValueError as ve:
-        print("VALUE ERROR, memory_kb is invalid..")
-    
-    kb_process = process["Memory_Usage"]
-
-    verdict = False
-
-    if kb_process > mem_threshold:
-        #if not check_detected(process["ID"]):
-            print("[{}]".format(rule["severity"]),end=' ')
-            print(rule["description"].format(process),end=' ')
-            ps_name = process.get("PROCESSNAME")
-            dst_ip = process.get("dst_ip")
-            src_ip = process.get("src_ip")
-            PID = process.get("ID")
-            print(f"{PID}: {ps_name} - {src_ip} -> {dst_ip}")
-            process["rule_description"] = rule["description"]
-            process["severity"] = rule["severity"]
-            process["rule_id"] = rule["rule_id"]
-            
-            return process
-            
-def match_blacklist_port(rule,process):
-    rule_id = rule["rule_id"]
-
-    if "src_port" not in process.keys():
-        
-        return
-
-    port_list = rule["match_blacklist_port"]
-    src_port = process["src_port"] or None
-    if src_port:
-        if int(src_port) in port_list:
-            #if not check_detected(process["ID"]):
-            print("[{}]".format(rule["severity"]),end=' ')
-            print(rule["description"].format(process),end=' ')
-            ps_name = process.get("PROCESSNAME")
-            dst_ip = process.get("dst_ip")
-            src_ip = process.get("src_ip")
-            PID = process.get("ID")
-            print(f"{PID}: {ps_name} - {src_ip} -> {dst_ip}")
-
-            process["rule_description"] = rule["description"]
-            process["severity"] = rule["severity"]
-            process["rule_id"] = rule["rule_id"]
-
-            return process
 def load_receivers():
     global config_data
 
     config_data = {
-        "url":SHUFFLE_URL,
-        "alert_level": severity_chart.get(NOTIFY_LEVEL)
-    
+        "url":SHUFFLE_URL
     }
     
-    
-
-def load_ruleset():
-    for rules in RULESET:
-        with open(rules,"r") as reader:
-            rule_data = json.load(reader)
-
-            for rule in rule_data:
-                if rule["rule_id"] not in extracted_rid:
-                    extracted_rid.append(rule["rule_id"])
-                    ruleset.append(rule)
-    
-        
-def check_process_with_ruleset(proc_data):
-    # load rulesets
-    # keys = ("rule_id","description","severity","process_data")
-    
-    matches = []
-    temp_rule_match = []
-    for rules in ruleset:
-        result_match = None
-
-        if "match_state" in rules.keys():
-            result_match = match_state(rules,proc_data)
-            if result_match:
-                matches.append(result_match)
-                temp_rule_match.append(rules["rule_id"])
-        if "match_blacklist_process" in rules.keys():
-            result_match = match_blacklist_process(rules,proc_data)
-            if result_match:
-                matches.append(result_match)
-                temp_rule_match.append(rules["rule_id"])
-        if "match_blacklist_port" in rules.keys():
-            result_match = match_blacklist_port(rules,proc_data)
-            if result_match:
-                matches.append(result_match)
-                temp_rule_match.append(rules["rule_id"])
-
-        if "match_process_pair" in rules.keys():
-            result_match = match_process_pair(rules,proc_data)   
-            if result_match:
-                matches.append(result_match)
-                temp_rule_match.append(rules["rule_id"])
-            # lateral ruleset time
-        
-    
-    return matches,temp_rule_match
-
 def parse_ps_data():
     if sys.platform == "win32":
         # Powershell power
@@ -492,9 +245,6 @@ def parse_netstat():
             ip_data = tuple([parts.split(":")[0] for parts in conn_data[0].split("->")])
 
             src_ip, dst_ip = ip_data if len(ip_data) == 2 else tuple(list(ip_data)*2)
-
-            if dst_ip == f"{real_indexer_host}:{indexer_port}":
-                continue
             
             conn_info["src"] = src_ip
 
@@ -519,8 +269,6 @@ def parse_netstat():
             # if src_ip == dst_ip:
             #     continue
             # src parsing
-            if conn_info["dst"] == f"{real_indexer_host}:{indexer_port}":
-                continue
             
             results.append(conn_info)
 
@@ -604,13 +352,6 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
 
                 process_running[final_pid]["src_ip"] = src_ip
                 
-                matches,matched_ids = check_process_with_ruleset(process_running[final_pid])
-                
-                laterals += matched_ids
-                
-                if len(matches) > 0:
-                    process_info["matched"].extend(matches)
-                
                 process_info["connections"].append(process_running[final_pid])
 
                 process_info["processes"][final_pid] = process_running[final_pid]
@@ -641,28 +382,7 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
         else:
             print("")
     
-    for rule in ruleset:
-        result_match = None
-        if "match_lateral" in rule.keys():
-            
-            all_rule_ids = laterals
-            
-            if all([ rule_id in all_rule_ids for rule_id in rule["match_lateral"]]):
-                    print("[{}]".format(rule["severity"]),end=' ')
-                    print("LATERAL DETECTION => ",end=' ')
-                    print(rule["description"].format(rule),end=' ')
-                    ps_name = "N/A"
-                    dst_ip = "N/A"
-                    src_ip = "N/A"
-                    PID = "N/A"
-
-                    rule["rule_description"] = f"{rule['description']} Ref: {str(rule['match_lateral'])}"
-                    rule["severity"] = rule["severity"]
-                    rule["rule_id"] = rule["rule_id"]
-                    print(f"{rule['match_lateral']}")
-                    del rule["match_lateral"]
-                    
-                    process_info["matched"].append(rule)
+    
     
     return proc_cache,process_info
 def stamp_process(process):
@@ -782,7 +502,6 @@ def tabulate_local(data):
             print(row_line)
 
 if __name__ == "__main__":
-    load_ruleset()
     load_receivers()
     print("""
        _____            _    ______ __  __ 
@@ -814,10 +533,6 @@ if __name__ == "__main__":
         "exited": []
     }
     # if indexer_host:
-    if indexer_host:
-        print(f"[+] Indexer Host: {indexer_host}:{indexer_port}")
-    else:
-        print("[!] Indexer host is not configured, skipping indexing..")
     if SHUFFLE_URL:
         print(f"[+] Shuffle URL: {SHUFFLE_URL}")
     else:
@@ -870,20 +585,21 @@ if __name__ == "__main__":
                             print(pql_result)
                 except FileNotFoundError as fe:
                     print("No search.pql specified.. Skipping. Define your search.pql on non interactive mode")
-                if indexer_host:
+                if SHUFFLE_URL:
                     for event in process_heartbeat["matched"]:
                         stamped = stamp_process(event)
                         stamped["type"] = "SockEm Alert"
-                        threading.Thread(target=send_to_indexer,args=[stamped]).start()
+                        threading.Thread(target=send_to_receiver,args=[stamped]).start()
                         # results.append(executor.submit(send_to_receiver, stamped))
                     for event in result:
                         stamped = stamp_process(event)
                         stamped["type"] = "SockEm PQL results"
-                        threading.Thread(target=send_to_indexer,args=[stamped]).start()
+                        threading.Thread(target=send_to_receiver,args=[stamped]).start()
                     for event in process_heartbeat["exited"]:
                         stamped = stamp_process(event)
                         stamped["type"] = "SockEm Process Terminaton Notification"
-                        threading.Thread(target=send_to_indexer,args=[stamped]).start()
+                        threading.Thread(target=send_to_receiver,args=[stamped]).start()
+                        
                 if not DAEMONIZE:
                     break
                 
