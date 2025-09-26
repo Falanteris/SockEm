@@ -33,6 +33,20 @@ import ssl
 from urllib.parse import quote_plus
 import argparse
 import socket
+from pydantic import BaseModel
+
+# class Payload(BaseModel):
+#     src_ip: str
+#     dst_ip: str
+#     src_port: int
+#     dst_port: int
+#     PROCESSNAME: str
+#     ID: str
+#     Memory_Usage: int
+#     hostname: str
+#     ip: str
+#     os: str
+#     type: str
 
 argp = argparse.ArgumentParser(
     description="use interactive or not?"
@@ -55,7 +69,7 @@ MAX_RETRIES = os.getenv("MAX_RETRIES") or 3
 
 GLOBAL_TIMEOUT = os.getenv("GLOBAL_TIMEOUT") or 5
 
-SHUFFLE_URL = os.getenv("SHUFFLE_URL")
+INTEGRATE_URL = os.getenv("INTEGRATE_URL")
 
 NOTIFY_LEVEL = os.getenv("NOTIFY_LEVEL")
 
@@ -95,16 +109,38 @@ def process_enhancement(data: dict):
 def send_to_receiver(beat):
     """Send data to receiver for SOAR"""
     ### skips if the alert level doesn't match
+    # this should support some older python versions, at least python 3.6
+    keys_extract = ("src_ip","dst_ip","dst_port","src_port","PROCESSNAME","ID","Memory_Usage","hostname","ip","os","type")
+    to_del = []
+    for items in beat.keys():
+        if items not in keys_extract:
+            to_del.append(items)
+    for key in to_del:
+        del beat[key]
+    if beat["type"] == "exited":
+        ## add fluff
+        beat["src_ip"] = ""
+        beat["dst_ip"] = ""
+        beat["src_port"] = -1
+        beat["dst_port"] = -1
+        beat["state"] = ""
+
+    print(beat)
 
     fullpath = config_data["url"]
 
     parsed = urlparse(fullpath)
 
     receiver_host,receiver_port = parsed.netloc.split(":") if ":" in parsed.netloc else (parsed.netloc, 443)
-
-    conn = http.client.HTTPSConnection(
-        receiver_host, receiver_port, context=ssl._create_unverified_context(),timeout=GLOBAL_TIMEOUT
-    )
+    
+    if parsed.scheme == "https":
+        conn = http.client.HTTPSConnection(
+            receiver_host, receiver_port, context=ssl._create_unverified_context(),timeout=GLOBAL_TIMEOUT
+        )
+    else:
+        conn = http.client.HTTPConnection(
+            receiver_host, receiver_port, timeout=GLOBAL_TIMEOUT
+        )
 
     
     attempt = 0
@@ -116,7 +152,6 @@ def send_to_receiver(beat):
     }
     # while MAX_RETRIES > attempt:
     try:
-        beat = process_enhancement(beat)
         conn.request(
             "POST", parsed.path,
             body=json.dumps(beat), headers=headers
@@ -154,7 +189,7 @@ def load_receivers():
     global config_data
 
     config_data = {
-        "url":SHUFFLE_URL
+        "url":INTEGRATE_URL
     }
     
 def parse_ps_data():
@@ -533,8 +568,8 @@ if __name__ == "__main__":
         "exited": []
     }
     # if indexer_host:
-    if SHUFFLE_URL:
-        print(f"[+] Shuffle URL: {SHUFFLE_URL}")
+    if INTEGRATE_URL:
+        print(f"[+] Shuffle URL: {INTEGRATE_URL}")
     else:
         print("[!] Shuffle URL is not configured, skipping SOAR integration..")
     proc_cache,process_heartbeat = run_scan(
@@ -557,7 +592,7 @@ if __name__ == "__main__":
                     process_heartbeat["processes"]
                 )
                 tabulate_local(result)
-                
+                proc_cache = []
                 proc_cache,process_heartbeat = run_scan(
                     timestamp,hostname,proc_cache,process_heartbeat
                 )
@@ -585,19 +620,15 @@ if __name__ == "__main__":
                             print(pql_result)
                 except FileNotFoundError as fe:
                     print("No search.pql specified.. Skipping. Define your search.pql on non interactive mode")
-                if SHUFFLE_URL:
-                    for event in process_heartbeat["matched"]:
+                if INTEGRATE_URL:
+                    
+                    for event in pql_result:
                         stamped = stamp_process(event)
-                        stamped["type"] = "SockEm Alert"
-                        threading.Thread(target=send_to_receiver,args=[stamped]).start()
-                        # results.append(executor.submit(send_to_receiver, stamped))
-                    for event in result:
-                        stamped = stamp_process(event)
-                        stamped["type"] = "SockEm PQL results"
+                        stamped["type"] = "pql_result"
                         threading.Thread(target=send_to_receiver,args=[stamped]).start()
                     for event in process_heartbeat["exited"]:
                         stamped = stamp_process(event)
-                        stamped["type"] = "SockEm Process Terminaton Notification"
+                        stamped["type"] = "exited"
                         threading.Thread(target=send_to_receiver,args=[stamped]).start()
                         
                 if not DAEMONIZE:
