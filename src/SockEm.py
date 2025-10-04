@@ -89,12 +89,25 @@ severity_chart = {
     "HIGH":3,
     "CRITICAL":4
 }
+if sys.platform == "win32":
+    # define trusted paths, essential to prevent DLL Search Order Attack
+    system_root = os.getenv("SYSTEMROOT")
+    
+    trusted_path_root = os.path.join(system_root,"System32")
+    
+    taskkill_path = os.path.join(trusted_path_root,"taskkill.exe")
+
+    wmic_path     = os.path.join(trusted_path_root,"wbem","wmic.exe")
+    
+    powershell_path = os.path.join(trusted_path_root,"WindowsPowerShell","v1.0","powershell.exe")
+
+    netstat_path = os.path.join(trusted_path_root, "netstat.exe")
 
 def process_enhancement(data: dict):
     pid = data["ID"]
     
     if sys.platform == "win32":
-        parent_pid = subprocess.check_output(["wmic",
+        parent_pid = subprocess.check_output([wmic_path,
         "process","where",
         f"(processid={pid})","get", "parentprocessid"],
         universal_newlines=True).strip().split("\n")[-1]
@@ -195,8 +208,9 @@ def load_receivers():
 def parse_ps_data():
     if sys.platform == "win32":
         # Powershell power
+        
         cmd = [
-        "powershell",
+        powershell_path,
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-Command","ps | Select-Object Handles, NPM, PM, WS, @{Name='CPU'; Expression={if ($_.CPU -ne $null) {$_.CPU} else {0.0}}},Id,SI,ProcessName | Format-Table -AutoSize"
@@ -246,7 +260,7 @@ def load_threat_data(file_path):
 def parse_netstat():
     """Parses netstat output for active network connections."""
     if sys.platform == "win32":
-        cmd = ["netstat", "-ano"]
+        cmd = [netstat_path, "-ano"]
         keys = ["proto", "src", "dst", "state", "pid"]
     elif sys.platform == "darwin":
         cmd = ["lsof", "-i", "-nP"]
