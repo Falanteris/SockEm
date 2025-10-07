@@ -33,7 +33,6 @@ import ssl
 from urllib.parse import quote_plus
 import argparse
 import socket
-from pydantic import BaseModel
 
 # class Payload(BaseModel):
 #     src_ip: str
