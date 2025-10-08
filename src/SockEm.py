@@ -34,18 +34,6 @@ from urllib.parse import quote_plus
 import argparse
 import socket
 
-# class Payload(BaseModel):
-#     src_ip: str
-#     dst_ip: str
-#     src_port: int
-#     dst_port: int
-#     PROCESSNAME: str
-#     ID: str
-#     Memory_Usage: int
-#     hostname: str
-#     ip: str
-#     os: str
-#     type: str
 
 argp = argparse.ArgumentParser(
     description="use interactive or not?"
@@ -620,6 +608,7 @@ if __name__ == "__main__":
                 pql_result = [] # result for pql queries
                 try:
                     with open("search.pql","r") as pql_data:
+                        pql = pql.strip()
                         for pql in pql_data.readlines():
                             if not pql.startswith("#"):
                                 # skip comment lines
