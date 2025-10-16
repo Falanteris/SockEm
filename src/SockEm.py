@@ -608,8 +608,9 @@ if __name__ == "__main__":
                 pql_result = [] # result for pql queries
                 try:
                     with open("search.pql","r") as pql_data:
-                        pql = pql.strip()
+                        
                         for pql in pql_data.readlines():
+                            pql = pql.strip()
                             if not pql.startswith("#"):
                                 # skip comment lines
                                 pql_result_temp = pql_query(
