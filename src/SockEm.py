@@ -90,6 +90,37 @@ if sys.platform == "win32":
 
     netstat_path = os.path.join(trusted_path_root, "netstat.exe")
 
+    ping_path = os.path.join(trusted_path_root, "ping.exe")
+
+
+
+def reachability_check(address):
+    caret_split = "\r\n"
+    ping_parser = lambda x: "from" in list(filter(None,x.decode().split("\n")))[1:][0]
+    ok_ping_parser = lambda x: list(filter(None,x.decode().split("\n")))[1:][0]
+
+    if sys.platform == "win32":
+        global ping_path
+        arg = [ping_path,"-n","1","-w","5000",address]        
+        ping_parser = lambda x: "Reply from" in list(filter(None,x.decode().split("\r\n")))[1:][0]
+        ok_ping_parser = lambda x: list(filter(None,x.decode().split("\r\n")))[1:][0]
+    else:
+        ping_path = "/usr/bin/ping"
+        arg = [ping_path,"-c","1","-w","5",address]
+        caret_split = "\n"
+    ping_check = subprocess.Popen(arg,stdout=subprocess.PIPE)
+    
+    output, _ = ping_check.communicate()
+    
+    parse_status = ping_parser(output)
+    print(parse_status)
+    reach_status = {
+        "reachable": parse_status,
+        "dst_ip": address
+    }
+
+    return reach_status 
+
 def process_enhancement(data: dict):
     pid = data["ID"]
     
@@ -106,28 +137,29 @@ def process_enhancement(data: dict):
     
     return data
 
-def send_to_receiver(beat):
+def send_to_receiver(beat, mode=""):
     """Send data to receiver for SOAR"""
     ### skips if the alert level doesn't match
     # this should support some older python versions, at least python 3.6
-    keys_extract = ("src_ip","dst_ip","dst_port","src_port","PROCESSNAME","ID","Memory_Usage","hostname","ip","os","type")
+    keys_extract = ("src_ip","dst_ip","dst_port","src_port","PROCESSNAME","ID","Memory_Usage","hostname","ip","os","type","reachable")
     to_del = []
     for items in beat.keys():
         if items not in keys_extract:
             to_del.append(items)
     for key in to_del:
         del beat[key]
-    if beat["type"] == "exited":
-        ## add fluff
-        beat["src_ip"] = ""
-        beat["dst_ip"] = ""
-        beat["src_port"] = -1
-        beat["dst_port"] = -1
-        beat["state"] = ""
+    if "type" in beat.keys():
+        if beat["type"] == "exited":
+            ## add fluff
+            beat["src_ip"] = ""
+            beat["dst_ip"] = ""
+            beat["src_port"] = -1
+            beat["dst_port"] = -1
+            beat["state"] = ""
 
     print(beat)
 
-    fullpath = config_data["url"]
+    fullpath = config_data["url"] if not mode else config_data["url"].replace("submit",mode)
 
     parsed = urlparse(fullpath)
 
@@ -537,6 +569,18 @@ def tabulate_local(data):
             row_line = " | ".join(f"{str(row_dict.get(h, '')):<{col_widths[h]}}" for h in headers)
             print(row_line)
 
+def ping_relay(dst_ip):
+    # relay ping data to the server
+    reachability = stamp_process(reachability_check(dst_ip))
+    
+    del reachability["timestamp"]
+
+    print(reachability)
+
+    send_to_receiver(reachability, mode="ping")
+    
+
+    pass
 if __name__ == "__main__":
     load_receivers()
     print("""
@@ -626,9 +670,15 @@ if __name__ == "__main__":
                 if INTEGRATE_URL:
                     
                     for event in pql_result:
+                    
                         stamped = stamp_process(event)
+                    
                         stamped["type"] = "pql_result"
+                    
                         threading.Thread(target=send_to_receiver,args=[stamped]).start()
+
+                        threading.Thread(target=ping_relay,args=[stamped["dst_ip"]]).start()
+                    
                     for event in process_heartbeat["exited"]:
                         stamped = stamp_process(event)
                         stamped["type"] = "exited"
