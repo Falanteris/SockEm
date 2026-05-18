@@ -1,2 +1,4 @@
 # This is an example PQL file, you can set this as a baseline
-Report * * nonlocal *
+Save * * nonlocal *
+Kill * socat * *
+Kill * nc * *

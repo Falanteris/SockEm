@@ -17,10 +17,8 @@ import subprocess
 import platform
 import sys
 import re
-import http.client
 import socket
 from datetime import datetime, timezone
-from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import time
@@ -29,8 +27,6 @@ import copy
 import glob
 import json
 import base64
-import ssl
-from urllib.parse import quote_plus
 import argparse
 import socket
 
@@ -94,33 +90,6 @@ if sys.platform == "win32":
 
 
 
-def reachability_check(address):
-    caret_split = "\r\n"
-    ping_parser = lambda x: "from" in list(filter(None,x.decode().split("\n")))[1:][0]
-    ok_ping_parser = lambda x: list(filter(None,x.decode().split("\n")))[1:][0]
-
-    if sys.platform == "win32":
-        global ping_path
-        arg = [ping_path,"-n","1","-w","5000",address]        
-        ping_parser = lambda x: "Reply from" in list(filter(None,x.decode().split("\r\n")))[1:][0]
-        ok_ping_parser = lambda x: list(filter(None,x.decode().split("\r\n")))[1:][0]
-    else:
-        ping_path = "/usr/bin/ping"
-        arg = [ping_path,"-c","1","-w","5",address]
-        caret_split = "\n"
-    ping_check = subprocess.Popen(arg,stdout=subprocess.PIPE)
-    
-    output, _ = ping_check.communicate()
-    
-    parse_status = ping_parser(output)
-    print(parse_status)
-    reach_status = {
-        "reachable": parse_status,
-        "dst_ip": address
-    }
-
-    return reach_status 
-
 def process_enhancement(data: dict):
     pid = data["ID"]
     
@@ -136,73 +105,6 @@ def process_enhancement(data: dict):
     data["PPID"] = parent_pid or None
     
     return data
-
-def send_to_receiver(beat, mode=""):
-    """Send data to receiver for SOAR"""
-    ### skips if the alert level doesn't match
-    # this should support some older python versions, at least python 3.6
-    keys_extract = ("src_ip","dst_ip","dst_port","src_port","PROCESSNAME","ID","Memory_Usage","hostname","ip","os","type","reachable")
-    to_del = []
-    for items in beat.keys():
-        if items not in keys_extract:
-            to_del.append(items)
-    for key in to_del:
-        del beat[key]
-    if "type" in beat.keys():
-        if beat["type"] == "exited":
-            ## add fluff
-            beat["src_ip"] = ""
-            beat["dst_ip"] = ""
-            beat["src_port"] = -1
-            beat["dst_port"] = -1
-            beat["state"] = ""
-
-    print(beat)
-
-    fullpath = config_data["url"] if not mode else config_data["url"].replace("submit",mode)
-
-    parsed = urlparse(fullpath)
-
-    receiver_host,receiver_port = parsed.netloc.split(":") if ":" in parsed.netloc else (parsed.netloc, 443)
-    
-    if parsed.scheme == "https":
-        conn = http.client.HTTPSConnection(
-            receiver_host, receiver_port, context=ssl._create_unverified_context(),timeout=GLOBAL_TIMEOUT
-        )
-    else:
-        conn = http.client.HTTPConnection(
-            receiver_host, receiver_port, timeout=GLOBAL_TIMEOUT
-        )
-
-    
-    attempt = 0
-    
-    result = False
-
-    headers = {
-            "Content-Type": "application/json"
-    }
-    # while MAX_RETRIES > attempt:
-    try:
-        conn.request(
-            "POST", parsed.path,
-            body=json.dumps(beat), headers=headers
-        )
-        # Handle response
-        response = conn.getresponse()
-        
-        conn.close()
-        
-        if response.status >= 200 and response.status < 300:
-            result = True
-            
-    except (TimeoutError, ConnectionRefusedError, socket.gaierror) as e:
-        print("Failed when trying to send to Receiver: ",e)
-        attempt+=1
-    except http.client.CannotSendRequest as e:
-        if e == "Request-Sent":
-            print("Terminating because our client sent the request already")
-    return result
 
 def get_outbound_ip():
 
@@ -231,7 +133,6 @@ def parse_ps_data():
         cmd = [
         powershell_path,
         "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
         "-Command","ps | Select-Object Handles, NPM, PM, WS, @{Name='CPU'; Expression={if ($_.CPU -ne $null) {$_.CPU} else {0.0}}},Id,SI,ProcessName | Format-Table -AutoSize"
 
         ]
@@ -266,15 +167,6 @@ def parse_ps_data():
 def get_hostname():
     """Retrieve the system hostname."""
     return socket.gethostname()
-
-def load_threat_data(file_path):
-    """Load threat intel from a local CSV file."""
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            return f.read().splitlines()
-    except Exception as e:
-        print(f"[ERROR] Failed to load {file_path}: {e}")
-        return []
 
 def parse_netstat():
     """Parses netstat output for active network connections."""
@@ -447,6 +339,8 @@ def run_scan(timestamp,hostname,proc_cache,process_info):
 
             printout = f"ProcessName: {process_name} at {last_seen} with a PID of {PID}. Memory: {memory} kb"
             print(printout)
+            save_to_task_log(old_process_info["processes"][items])
+
         else:
             print("")
     
@@ -491,20 +385,13 @@ def kill_windows_task(pid):
     except Exception as e:
         print(e)
 def save_to_task_log(procdata):
-    with open(f"{get_hostname()}.json","r") as json_file:
-        data = json.load(json_file) # expected an array
-        data["logs"].append(procdata)
-    with open(f"{get_hostname()}.json","w") as json_file:
-        json.dump(data,json_file,indent=6)
+    with open(f"{get_hostname()}.log","a") as json_file:
+        json_file.write(json.dumps(procdata)+"\n")
 
 def init_task_log():
     if not os.path.exists(f"{get_hostname()}.json"):
-        with open(f"{get_hostname()}.json","w") as json_file:
-            data = {
-                "logs":[]
-            }
-            json.dump(data,json_file)
-
+        with open(f"{get_hostname()}.log","w") as json_file:
+            pass
 
 def kill_unix_task(pid):
     try:
@@ -555,7 +442,7 @@ def pql_query(query: str, heartbeat_data: list, ps_list: list):
         if params["command"] == "Kill":
             # print(f"!!! KILL", end=' ')
             # prioritize parent PID, kill the process from it's root
-            kill_windows_task(matches["PPID"] or matches["PID"]) if sys.platform == "win32" else kill_unix_task(matches["PPID"] or matches["ID"])
+            kill_windows_task(matches["ID"]) if sys.platform == "win32" else kill_unix_task(matches["ID"])
         if params["command"] == "Save":
             save_to_task_log(matches)
 
@@ -588,15 +475,6 @@ def tabulate_local(data):
             row_line = " | ".join(f"{str(row_dict.get(h, '')):<{col_widths[h]}}" for h in headers)
             print(row_line)
 
-def ping_relay(dst_ip):
-    # relay ping data to the server
-    reachability = stamp_process(reachability_check(dst_ip))
-    
-    del reachability["timestamp"]
-
-    print(reachability)
-
-    send_to_receiver(reachability, mode="ping")
     
 
     pass
@@ -690,19 +568,13 @@ if __name__ == "__main__":
                 if INTEGRATE_URL:
                     
                     for event in pql_result:
-                    
                         stamped = stamp_process(event)
-                    
                         stamped["type"] = "pql_result"
-                    
-                        threading.Thread(target=send_to_receiver,args=[stamped]).start()
 
-                        threading.Thread(target=ping_relay,args=[stamped["dst_ip"]]).start()
-                    
                     for event in process_heartbeat["exited"]:
                         stamped = stamp_process(event)
                         stamped["type"] = "exited"
-                        threading.Thread(target=send_to_receiver,args=[stamped]).start()
+                        save_to_task_log(stamped)
                         
                 if not DAEMONIZE:
                     break
