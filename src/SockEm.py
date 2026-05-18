@@ -490,6 +490,21 @@ def kill_windows_task(pid):
         subprocess.check_output(["taskkill", "/F", "/PID", str(pid)])
     except Exception as e:
         print(e)
+def save_to_task_log(procdata):
+    with open(f"{get_hostname()}.json","r") as json_file:
+        data = json.load(json_file) # expected an array
+        data["logs"].append(procdata)
+    with open(f"{get_hostname()}.json","w") as json_file:
+        json.dump(data,json_file,indent=6)
+
+def init_task_log():
+    if not os.path.exists(f"{get_hostname()}.json"):
+        with open(f"{get_hostname()}.json","w") as json_file:
+            data = {
+                "logs":[]
+            }
+            json.dump(data,json_file)
+
 
 def kill_unix_task(pid):
     try:
@@ -513,12 +528,13 @@ def pql_query(query: str, heartbeat_data: list, ps_list: list):
     try:
         directives = ["command","parent","child","dst_host","dst_port"]
         params = dict(zip(directives,item))
+        assert len(params.keys) == len(directives)
     except Exception as e:
         pass
-    if params["command"] not in ("Kill","Report"):
-        print("Command has to be 'Kill' or 'Report'")
+    if params["command"] not in ("Kill","Report","Save"):
+        print("Command has to be 'Kill' or 'Report' or 'Save'")
         return
-    
+    print(params)
     query_exec = lambda beat_arg: all((
         beat_arg["PROCESSNAME"] == params["child"] if params["child"] !='*' else True,
         any((
@@ -540,6 +556,9 @@ def pql_query(query: str, heartbeat_data: list, ps_list: list):
             # print(f"!!! KILL", end=' ')
             # prioritize parent PID, kill the process from it's root
             kill_windows_task(matches["PPID"] or matches["PID"]) if sys.platform == "win32" else kill_unix_task(matches["PPID"] or matches["ID"])
+        if params["command"] == "Save":
+            save_to_task_log(matches)
+
         # else:
         #     print(f"!!! REPORT", end=' ')
 
@@ -582,6 +601,7 @@ def ping_relay(dst_ip):
 
     pass
 if __name__ == "__main__":
+    init_task_log()
     load_receivers()
     print("""
        _____            _    ______ __  __ 
@@ -604,7 +624,7 @@ if __name__ == "__main__":
 
     proc_cache = []
     
-    print(f"\n[+] Forensic Network Scan - {timestamp} (Hostname: {hostname})")
+    print(f"\n[+] Network Activity Scan - {timestamp} (Hostname: {hostname})")
     
     process_heartbeat = {
         "connections":[],
@@ -623,7 +643,7 @@ if __name__ == "__main__":
     if cli_args.interactive or INTERACTIVE:
         
         print("Welcome to SockEm's Interactive mode",end='\n\n')
-        print("PQL Format [<Kill/Report> <ParentProcessName/*> <ProcessName/nonlocal/*> <port/nsp>]",end='\n\n')
+        print("PQL Format [<Kill/Report/Save> <ParentPID/*> <ChildProcessName/*> <Host/nonlocal/*> <port/nsp>]",end='\n\n')
         print("nsp: Non-Standard Port --> Refer to IANA standard port for this")
         print("nonlocal: Anything besides localhost",end='\n\n')
         print("Please enter your PQL: ")
