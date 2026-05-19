@@ -29,6 +29,7 @@ import json
 import base64
 import argparse
 import socket
+import ipaddress
 
 
 argp = argparse.ArgumentParser(
@@ -38,6 +39,8 @@ argp = argparse.ArgumentParser(
 argp.add_argument("--interactive", action="store_true")
 
 cli_args = argp.parse_args()
+
+GLOBAL_IP_WHITELIST = set()
 
 DAEMONIZE = True if os.getenv("DAEMONIZE") == "1" else False
 
@@ -88,6 +91,21 @@ if sys.platform == "win32":
 
     ping_path = os.path.join(trusted_path_root, "ping.exe")
 
+def ip_list(notation):
+    agg_ip = set()
+    notation = notation.split(",") 
+    for items in notation:
+        check_subnet = items.split("/")
+        if len(check_subnet) == 2:
+            # processing all subnets
+            [agg_ip.add(str(addr)) for addr in ipaddress.ip_network(items).hosts()]
+        else:
+            agg_ip.update(notation)
+    
+    global GLOBAL_IP_WHITELIST
+
+    GLOBAL_IP_WHITELIST.update(agg_ip)
+    return agg_ip
 
 
 def process_enhancement(data: dict):
@@ -411,22 +429,32 @@ def fetch_specific_process(pid):
 def pql_query(query: str, heartbeat_data: list, ps_list: list):
     # Query Format
     # <DIRECTIVE (Kill/Report)> <PARENT_PROC_NAME_PATTERN> <PARENT_PROC_CHILD_PATTERN> <DEST_HOST> <PORT>
+    
     item = query.split(" ")
+    
     try:
         directives = ["command","parent","child","dst_host","dst_port"]
         params = dict(zip(directives,item))
-        assert len(params.keys) == len(directives)
+        if params["command"] != "wldefine":
+            assert len(params.keys()) == len(directives)
     except Exception as e:
         pass
-    if params["command"] not in ("Kill","Report","Save"):
-        print("Command has to be 'Kill' or 'Report' or 'Save'")
+    if params["command"] not in ("Kill","Report","Save","wldefine"):
+        print("Command has to be 'Kill' or 'Report' or 'Save' or 'wldefine'")
         return
-    print(params)
+    if params["command"] == "wldefine":
+        notation = params["parent"]
+        ip_list(notation)
+        return
+    loopb = ("127.0.0.1","[::]","[::1]","0.0.0.0")
     query_exec = lambda beat_arg: all((
         beat_arg["PROCESSNAME"] == params["child"] if params["child"] !='*' else True,
+        beat_arg["dst_ip"] not in GLOBAL_IP_WHITELIST if params["command"] == "Kill" else True, # Whitelist only concerns task kill activity
         any((
             beat_arg["dst_ip"] == params["dst_host"] if params["dst_host"] !='*' else True,
-            beat_arg["dst_ip"] not in ("127.0.0.1","[::]","[::1]","0.0.0.0") if params["dst_host"] =='nonlocal' else False
+            beat_arg["dst_ip"] in ip_list(params["dst_host"]) if params["dst_host"] !='*' and beat_arg["dst_ip"] not in loopb else False,
+            beat_arg["dst_ip"] not in loopb if params["dst_host"] =='nonlocal' else False
+            
         )),
         any((
             beat_arg["dst_port"] == params["dst_port"] if params["dst_port"] !='*' else True,
@@ -445,15 +473,19 @@ def pql_query(query: str, heartbeat_data: list, ps_list: list):
             kill_windows_task(matches["ID"]) if sys.platform == "win32" else kill_unix_task(matches["ID"])
         if params["command"] == "Save":
             save_to_task_log(matches)
-
+          
         # else:
         #     print(f"!!! REPORT", end=' ')
 
         # print(f"{matches}")
         
-        matches["command"] = params["command"]
-
+        # matches["command"] = params["command"]
+        
+        # if params["command"] == "Report":
+        #     print(matches)
+            
         match_final.append(matches)
+
     return match_final
 
 def tabulate_local(data):
@@ -525,8 +557,8 @@ if __name__ == "__main__":
         print("nsp: Non-Standard Port --> Refer to IANA standard port for this")
         print("nonlocal: Anything besides localhost",end='\n\n')
         print("Please enter your PQL: ")
-        
-        while True:
+            
+        while True:            
             try:        
                 pql = input("query>> ")
                 result = pql_query(
@@ -545,22 +577,38 @@ if __name__ == "__main__":
                 raise Exception(e)
             
     elif not cli_args.interactive:
+   
+        with open("search.pql","r") as pql_data:
+            pql_data = pql_data
+        start_time = datetime.now()
+
         while True:
+            end_time = datetime.now()
+        
+            duration = end_time - start_time
+
+            seconds = duration.seconds
+
+            if seconds >= 60:
+                start_time = datetime.now()
+                with open("search.pql","r") as pql_data:
+                    pql_data = pql_data
             try:
                 pql_result = [] # result for pql queries
-                try:
+                try:                    
                     with open("search.pql","r") as pql_data:
-                        
+                        GLOBAL_IP_WHITELIST.clear()
                         for pql in pql_data.readlines():
                             pql = pql.strip()
-                            if not pql.startswith("#"):
+                            if not pql.startswith("#") and not (pql == ""):
                                 # skip comment lines
                                 pql_result_temp = pql_query(
                                     pql,
                                     process_heartbeat["connections"],
                                     process_heartbeat["processes"]
                                 )
-                                pql_result.extend(pql_result_temp)                                
+                                if pql_result_temp:
+                                    pql_result.extend(pql_result_temp)                              
                         if len(pql_result) > 0:
                             print(pql_result)
                 except FileNotFoundError as fe:
@@ -570,7 +618,7 @@ if __name__ == "__main__":
                     for event in pql_result:
                         stamped = stamp_process(event)
                         stamped["type"] = "pql_result"
-
+                        
                     for event in process_heartbeat["exited"]:
                         stamped = stamp_process(event)
                         stamped["type"] = "exited"
@@ -585,7 +633,8 @@ if __name__ == "__main__":
                     timestamp,hostname,proc_cache,process_heartbeat
                 )
             except Exception as e:
-                print(f"[ERROR] An error occurred: {e}", file=sys.stderr)
+                raise Exception(e)
+                #print(f"[ERROR] An error occurred: {e}", file=sys.stderr)
                 continue
 
 

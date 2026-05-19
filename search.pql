@@ -1,4 +1,12 @@
 # This is an example PQL file, you can set this as a baseline
-Save * * nonlocal *
-Kill * socat * *
-Kill * nc * *
+# PQL will be executed in a top-bottom order
+# format < Kill/Save/wldefine > <ParentPID/*> <ProcessName/*> <Host/nonlocal/*> <Port/nsp/*>
+
+# wldefine: this directive adds 10.1.1.0/24 subnet to the whitelist
+wldefine 10.1.1.0/24
+
+# Kill: terminate process used in a query
+Kill * putty * *
+
+# Save: log queried processes into a JSON log file
+Save * putty 10.1.1.13 *
