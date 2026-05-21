@@ -1,3 +1,15 @@
+# Pre-Requisites
+
+Setup `netstat` by installing the relevant package
+
+        sudo apt-get install net-tools # debian based
+        
+        
+ And for RHEL
+        
+        sudo yum install net-tools
+
+
 # Using SockEm to monitor Linux Machine
 
 If you're using a Linux system with systemd, you can create a service file to manage SockEm as a daemon. Here's an example:

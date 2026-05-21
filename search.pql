@@ -6,8 +6,9 @@
 wldefine 10.1.1.0/24
 
 # Kill: terminate process used in a query
-Kill * putty * *
+#Kill * putty * *
 
 # Save: log queried processes into a JSON log file
-Save * putty 10.1.1.13 *
-Save * svchost nonlocal *
+#Save * putty 10.1.1.13 *
+#Save * svchost nonlocal *
+Save * * nonlocal *

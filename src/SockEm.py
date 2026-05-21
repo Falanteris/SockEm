@@ -626,7 +626,7 @@ if __name__ == "__main__":
                                     if pql_result_temp:
                                         pql_result.extend(pql_result_temp)
                                     end = time.time()
-                                    print(f"[INFO] Extraction Time Elapsed: {(end - start):.2f}")
+                                    #print(f"[INFO] Extraction Time Elapsed: {(end - start):.2f}")
 
                         if len(pql_result) > 0:
                             print(pql_result)
