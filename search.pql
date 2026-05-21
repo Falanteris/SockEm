@@ -10,3 +10,4 @@ Kill * putty * *
 
 # Save: log queried processes into a JSON log file
 Save * putty 10.1.1.13 *
+Save * svchost nonlocal *

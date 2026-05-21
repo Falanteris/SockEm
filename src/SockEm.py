@@ -20,7 +20,6 @@ import re
 import socket
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
-import threading
 import time
 import os
 import copy
@@ -173,7 +172,10 @@ def parse_ps_data():
     process_kv = dict()
     for result in results:
         if sys.platform == "win32":
-            result["USER"] = "SYSTEM" if result["USER"] == "0" else result["USER"]
+            if "USER" in result.keys():
+                result["USER"] = "SYSTEM" if result["USER"] == "0" else result["USER"]
+            else:
+                result["USER"] = ""
             result["Memory_Usage"] = int(float(result["Memory_Usage"] ) / 1024)
         else:
             result["Memory_Usage"] = int(float(result["Memory_Usage"] ))
@@ -510,6 +512,9 @@ def tabulate_local(data):
     
 
     pass
+
+def wrap_loop_func():
+    pass
 if __name__ == "__main__":
     init_task_log()
     load_receivers()
@@ -561,12 +566,14 @@ if __name__ == "__main__":
         while True:            
             try:        
                 pql = input("query>> ")
+
                 result = pql_query(
                     pql, 
                     process_heartbeat["connections"],
                     process_heartbeat["processes"]
                 )
-                tabulate_local(result)
+                
+                #tabulate_local(result)
                 proc_cache = []
                 proc_cache,process_heartbeat = run_scan(
                     timestamp,hostname,proc_cache,process_heartbeat
@@ -598,17 +605,29 @@ if __name__ == "__main__":
                 try:                    
                     with open("search.pql","r") as pql_data:
                         GLOBAL_IP_WHITELIST.clear()
-                        for pql in pql_data.readlines():
-                            pql = pql.strip()
-                            if not pql.startswith("#") and not (pql == ""):
-                                # skip comment lines
-                                pql_result_temp = pql_query(
-                                    pql,
-                                    process_heartbeat["connections"],
-                                    process_heartbeat["processes"]
-                                )
-                                if pql_result_temp:
-                                    pql_result.extend(pql_result_temp)                              
+                        pql_items = pql_data.readlines()
+                        with ThreadPoolExecutor(max_workers=len(pql_items)) as executor:
+                            for pql in pql_items:
+                                pql = pql.strip()
+                                if not pql.startswith("#") and not (pql == ""):
+                                    # skip comment lines
+                                    start = time.time()
+                                    pql_result_temp = pql_query(
+                                        pql,
+                                        process_heartbeat["connections"],
+                                        process_heartbeat["processes"]
+                                    )
+                                    future = executor.submit(
+                                        pql_query, 
+                                        pql,process_heartbeat["connections"],
+                                        process_heartbeat["processes"]
+                                    )
+                                    pql_result_temp = future.result()
+                                    if pql_result_temp:
+                                        pql_result.extend(pql_result_temp)
+                                    end = time.time()
+                                    print(f"[INFO] Extraction Time Elapsed: {(end - start):.2f}")
+
                         if len(pql_result) > 0:
                             print(pql_result)
                 except FileNotFoundError as fe:
@@ -627,7 +646,7 @@ if __name__ == "__main__":
                 if not DAEMONIZE:
                     break
                 
-                time.sleep(3)
+                #time.sleep(1.5)
                 
                 proc_cache,process_heartbeat = run_scan(
                     timestamp,hostname,proc_cache,process_heartbeat
