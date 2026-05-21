@@ -12,10 +12,6 @@ Description=SockEm Service
 After=network.target
 
 [Service]
-Environment="INDEXER_HOST=your-indexer-host"
-Environment="INDEXER_PORT=your-indexer-port"
-Environment="INDEXER_USERNAME=your-username"
-Environment="INDEXER_PASSWORD=your-password"
 Environment="DAEMONIZE=1"
 WorkingDirectory=/path/to/sockem
 ExecStart=/usr/bin/python3 src/SockEm.py
@@ -46,10 +42,6 @@ Description=SockEm Service
 After=network.target
 
 [Service]
-Environment="INDEXER_HOST=your-indexer-host"
-Environment="INDEXER_PORT=your-indexer-port"
-Environment="INDEXER_USERNAME=your-username"
-Environment="INDEXER_PASSWORD=your-password"
 Environment="DAEMONIZE=1"
 WorkingDirectory=/path/to/sockem
 ExecStart=/usr/bin/python3 src/SockEm.py

@@ -7,17 +7,15 @@
 SockEm is a tool for ...
 ## Features  
 
-- Checks active connections and compare them to a neat **JSON ruleset**.  
 - **Zero dependencies** – Works on any OS with Python 3 installed (no `pip` or external libraries required).
 - **Optional save feature** - Save locally to a JSON file for further audit.
+- **Cross Platform** - Be it Linux, Windows, or Even MacOS. As long as they have sockets, SockEm can help.
 
 ## What Does It Check?  
 
 - **Live sockets** – Active network connections.  
 - **Ports** – Open and listening ports.  
 - **Processes** – Identifies processes associated with network activity.  
-
-...And audits them against threat intelligence sources.  
 
 ## How to run
 First, setup your ruleset, we will use PQL ( Process Query Language)
@@ -70,9 +68,9 @@ And for Linux
 
 ## Concept
 
-SockEm is designed to have zero write activity on the device to preserve forensic integrity.
+SockEm is designed to have minimum write activity on the device to preserve forensic integrity.
 
-You can create your own custom ruleset under the ruleset folder that can help you detect a specific event.
+Utilize search.pql to quickly query,save, or even enforce Socket activity.
 
 ## Further Instructions
 
